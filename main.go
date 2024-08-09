@@ -24,7 +24,7 @@ func main() {
 	}
 
 	// Set up storage
-	var s = NewStorage(config.Source, config.Target)
+	var s = NewStorage(config.Target, config.Source)
 
 	// Load UI
 	initialModel := model{

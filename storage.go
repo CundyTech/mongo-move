@@ -62,9 +62,7 @@ func (s storage) copy(collection string, database string) error {
 	for cursor.Next(context.Background()) {
 		var doc interface{}
 		if err := cursor.Decode(&doc); err != nil {
-			if err != nil {
-				return err
-			}
+			return err
 		}
 
 		var opts = options.InsertOneOptions{}
