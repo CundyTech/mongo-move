@@ -22,14 +22,14 @@ func NewStorage(targetURI string, sourceURI string) storage {
 }
 
 func (s storage) copy(collection string, database string) error {
-	sOptions := options.Client().ApplyURI(s.targetURI)
+	sOptions := options.Client().ApplyURI(s.sourceURI)
 	sClient, err := mongo.Connect(context.Background(), sOptions)
 	if err != nil {
 		return err
 	}
 	defer sClient.Disconnect(context.Background())
 
-	tOptions := options.Client().ApplyURI(s.sourceURI)
+	tOptions := options.Client().ApplyURI(s.targetURI)
 	tClient, err := mongo.Connect(context.Background(), tOptions)
 	if err != nil {
 		return err
@@ -38,7 +38,7 @@ func (s storage) copy(collection string, database string) error {
 
 	// Get source and target collections
 	sourceCollection := sClient.Database(database).Collection(collection)
-	targetCollection := tClient.Database("local2").Collection(collection)
+	targetCollection := tClient.Database(database).Collection(collection)
 
 	// Check there are documents to move
 	count, err := sourceCollection.CountDocuments(context.Background(), bson.D{})
