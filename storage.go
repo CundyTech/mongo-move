@@ -9,19 +9,30 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+type Storage interface {
+	NewStorage(targetURI string, sourceURI string) storage
+	copy(sourceCollection string, targetCollection string, sourceDatabase string, targetDatabase string)
+	getTargetDatabases() ([]string, error)
+	getSourceDatabases() ([]string, error)
+	getTargetCollections(databaseName string) ([]string, error)
+	getSourceCollections(databaseName string) ([]string, error)
+}
+
 type storage struct {
 	targetURI string
 	sourceURI string
 }
 
-func NewStorage(targetURI string, sourceURI string) storage {
+// Initialize new storage instance
+func newStorage(targetURI string, sourceURI string) storage {
 	var s storage
 	s.targetURI = targetURI
 	s.sourceURI = sourceURI
 	return s
 }
 
-func (s storage) copy(collection string, database string) error {
+// Copy data from given source database/collection to target database/collection deleting all data in target first.
+func (s storage) copy(sourceCollection string, targetCollection string, sourceDatabase string, targetDatabase string) error {
 	sOptions := options.Client().ApplyURI(s.sourceURI)
 	sClient, err := mongo.Connect(context.Background(), sOptions)
 	if err != nil {
@@ -37,11 +48,11 @@ func (s storage) copy(collection string, database string) error {
 	defer tClient.Disconnect(context.Background())
 
 	// Get source and target collections
-	sourceCollection := sClient.Database(database).Collection(collection)
-	targetCollection := tClient.Database(database).Collection(collection)
+	sc := sClient.Database(sourceDatabase).Collection(sourceCollection)
+	tc := tClient.Database(targetDatabase).Collection(targetCollection)
 
 	// Check there are documents to move
-	count, err := sourceCollection.CountDocuments(context.Background(), bson.D{})
+	count, err := sc.CountDocuments(context.Background(), bson.D{})
 	if count == 0 {
 		return errors.New("no records in source collection to copy")
 	} else if err != nil {
@@ -49,14 +60,14 @@ func (s storage) copy(collection string, database string) error {
 	}
 
 	// Find documents in the source collection
-	cursor, err := sourceCollection.Find(context.Background(), bson.D{})
+	cursor, err := sc.Find(context.Background(), bson.D{})
 	if err != nil {
 		return err
 	}
 	defer cursor.Close(context.Background())
 
 	// Delete all documents in target
-	targetCollection.DeleteMany(context.Background(), bson.D{})
+	tc.DeleteMany(context.Background(), bson.D{})
 
 	// Iterate through documents and insert into target collection
 	for cursor.Next(context.Background()) {
@@ -66,7 +77,7 @@ func (s storage) copy(collection string, database string) error {
 		}
 
 		var opts = options.InsertOneOptions{}
-		_, err := targetCollection.InsertOne(context.Background(), doc, &opts)
+		_, err := tc.InsertOne(context.Background(), doc, &opts)
 		if err != nil {
 			return err
 		}
@@ -75,6 +86,7 @@ func (s storage) copy(collection string, database string) error {
 	return nil
 }
 
+// Get collections from target database.
 func (s storage) getTargetCollections(databaseName string) ([]string, error) {
 	options := options.Client().ApplyURI(s.sourceURI)
 	client, err := mongo.Connect(context.Background(), options)
@@ -94,6 +106,7 @@ func (s storage) getTargetCollections(databaseName string) ([]string, error) {
 	return result, nil
 }
 
+// Get collections from source database.
 func (s storage) getSourceCollections(databaseName string) ([]string, error) {
 	options := options.Client().ApplyURI(s.sourceURI)
 	client, err := mongo.Connect(context.Background(), options)
@@ -113,6 +126,7 @@ func (s storage) getSourceCollections(databaseName string) ([]string, error) {
 	return result, nil
 }
 
+// Get all databases from target server provided in config.
 func (s storage) getTargetDatabases() ([]string, error) {
 	options := options.Client().ApplyURI(s.targetURI)
 	client, err := mongo.Connect(context.Background(), options)
@@ -129,6 +143,7 @@ func (s storage) getTargetDatabases() ([]string, error) {
 	return result, nil
 }
 
+// Get all databases from source server provided in config.
 func (s storage) getSourceDatabases() ([]string, error) {
 	options := options.Client().ApplyURI(s.sourceURI)
 	client, err := mongo.Connect(context.Background(), options)
