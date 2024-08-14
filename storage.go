@@ -75,7 +75,7 @@ func (s storage) copy(collection string, database string) error {
 	return nil
 }
 
-func (s storage) getCollections(databaseName string) ([]string, error) {
+func (s storage) getTargetCollections(databaseName string) ([]string, error) {
 	options := options.Client().ApplyURI(s.sourceURI)
 	client, err := mongo.Connect(context.Background(), options)
 	if err != nil {
@@ -94,7 +94,42 @@ func (s storage) getCollections(databaseName string) ([]string, error) {
 	return result, nil
 }
 
-func (s storage) getDatabases() ([]string, error) {
+func (s storage) getSourceCollections(databaseName string) ([]string, error) {
+	options := options.Client().ApplyURI(s.sourceURI)
+	client, err := mongo.Connect(context.Background(), options)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Disconnect(context.Background())
+
+	db := client.Database(databaseName)
+
+	// Retrieve collection names
+	result, err := db.ListCollectionNames(context.TODO(), bson.D{})
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s storage) getTargetDatabases() ([]string, error) {
+	options := options.Client().ApplyURI(s.targetURI)
+	client, err := mongo.Connect(context.Background(), options)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Disconnect(context.Background())
+
+	result, err := client.ListDatabaseNames(context.TODO(), bson.D{})
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s storage) getSourceDatabases() ([]string, error) {
 	options := options.Client().ApplyURI(s.sourceURI)
 	client, err := mongo.Connect(context.Background(), options)
 	if err != nil {

@@ -1,4 +1,4 @@
 {
-    "sourceServer": "mongodb://remotehost:27017/",
-    "targetServer": "mongodb://localhost:27017/"
+    "sourceServer": "mongodb://localhost:27017",
+    "targetServer": "mongodb://localhost:27017"
 }
