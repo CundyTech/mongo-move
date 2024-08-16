@@ -11,12 +11,14 @@ import (
 )
 
 const (
-	targetColumnName   = "Target Collections"
-	sourceColumnName   = "Source Collections"
-	taskMapColumnsName = "Collections Map"
-	progressBarWidth   = 71
-	dotChar            = " • "
-	banner             = `
+	targetCollectionsColumnName = "Target Collections"
+	sourceCollectionsColumnName = "Source Collections"
+	targetDatabasesColumnName   = "Target Databases"
+	sourceDatabasesColumnName   = "Source Databases"
+	taskMapColumnsName          = "Collections Map"
+	progressBarWidth            = 71
+	dotChar                     = " • "
+	banner                      = `
   __  __                           __  __                
  |  \/  |                         |  \/  |               
  | \  / | ___  _ __   __ _  ___   | \  / | _____   _____ 
@@ -49,7 +51,7 @@ const (
 
 // General stuff for styling the view
 var (
-	bannerStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#54ad48"))
+	green         = lipgloss.NewStyle().Foreground(lipgloss.Color("#54ad48"))
 	keywordStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("211"))
 	subtleStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	checkboxStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
@@ -62,6 +64,11 @@ type copyMsg struct {
 }
 
 type collections struct {
+	target []string
+	source []string
+}
+
+type databases struct {
 	target []string
 	source []string
 }
@@ -80,9 +87,8 @@ type collectionCopyTask struct {
 }
 
 type (
-	getSourceDatabasesMsg []string
-	getTargetDatabasesMsg []string
-	getCollectionsMsg     collections
+	getDatabasesMsg   databases
+	getCollectionsMsg collections
 )
 
 type errMsg struct {
@@ -96,42 +102,48 @@ type fatalError struct {
 }
 
 // Model for view where user chooses the source and target collections
-type collectionChoiceTableViewModel struct {
-	sourceTable       table.Model          // Table that displays collections in the source database
-	targetTable       table.Model          // Table that displays collections in the target database
-	copyTaskTable     table.Model          // Table that displays chosen source and target collection maps
-	copyTasks         []collectionCopyTask // Vollection of source and targets where data will be moved from and to respectively
-	currentCopyTask   collectionCopyTask   // Vurrent user selection of source and target collections
-	currentTableIndex int                  // Index of the table is currently in use by user. 0 = sourceTable, 1 = targetTable and 2 = copyTaskTable
-	pageSize          int                  // Default size of a page of all tables
-	rowCount          int                  // The amount of rows in a table
-	collectionsChosen bool                 // Has user made collection choices
+type collectionChoicesViewModel struct {
+	sourceTable         table.Model // Table that displays collections in the source database
+	sourceTableFiltered bool
+	targetTable         table.Model // Table that displays collections in the target database
+	targetTableFiltered bool
+	copyTaskTable       table.Model          // Table that displays chosen source and target collection maps
+	copyTasks           []collectionCopyTask // Collection of source and targets where data will be moved from and to respectively
+	currentCopyTask     collectionCopyTask   // Vurrent user selection of source and target collections
+	currentTableIndex   int                  // Index of the table is currently in use by user. 0 = sourceTable, 1 = targetTable and 2 = copyTaskTable
+	pageSize            int                  // Default size of a page of all tables
+	rowCount            int                  // The amount of rows in a table
+	collectionsChosen   bool                 // Has user made collection choices
 }
 
-type databaseSourceChoicesViewModel struct {
-	sourceDatabases         []string // Databases on server
-	sourceDatabaseChoice    int      // Database chosen by user
-	sourceDatabaseChosen    bool     // Has user made database selection
-	sourceCollections       []string // Collections in database
-	sourceCurrentCollection int      // Collection cursor is current on
-}
-
-type databaseTargetChoicesViewModel struct {
-	targetDatabases         []string // Databases on server
-	targetDatabaseChoice    int      // Database chosen by user
-	targetDatabaseChosen    bool     // Has user made database selection
-	targetCollections       []string // Collections in database
-	targetCurrentCollection int      // Collection cursor is current on
+type databaseChoicesViewModel struct {
+	sourceDatabases         []string    // Databases on server
+	sourceDatabaseChoice    string      // Database chosen by user
+	databasesChosen         bool        // Has user made database selections
+	sourceCollections       []string    // Collections in database
+	sourceCurrentCollection int         // Collection cursor is current on
+	sourcePageSize          int         // Default size of a page of all tables
+	sourceRowCount          int         // The amount of rows in a table
+	sourceTable             table.Model // Table that displays collections in the source database
+	sourceTableFiltered     bool
+	targetDatabases         []string    // Databases on server
+	targetDatabaseChoice    string      // Database chosen by user
+	targetCollections       []string    // Collections in database
+	targetCurrentCollection int         // Collection cursor is current on
+	targetPageSize          int         // Default size of a page of all tables
+	targetRowCount          int         // The amount of rows in a table
+	targetTable             table.Model // Table that displays collections in the target database
+	targetTableFiltered     bool
+	currentTableIndex       int // Index of the table is currently in use by user. 0 = sourceTable, 1 = targetTable
 }
 
 // Main model
 type model struct {
-	quitting   bool                           // Has user quit application
-	storage    storage                        // Storage
-	fatalError *fatalError                    // Fatal Error details
-	dscvm      databaseSourceChoicesViewModel // Model for databaseSourceChoicesView view
-	dtcvm      databaseTargetChoicesViewModel // Model for databaseTargetChoicesView view
-	cctvm      collectionChoiceTableViewModel // Model for collectionChoiceTable view
+	quitting          bool                       // Has user quit application
+	storage           storage                    // Storage
+	fatalError        *fatalError                // Fatal Error details
+	databaseChoices   databaseChoicesViewModel   // Model for databaseChoicesView view
+	collectionChoices collectionChoicesViewModel // Model for collectionChoicesTable view
 }
 
 // Init function that returns an initial command for the application to run
@@ -143,33 +155,32 @@ func (m model) Init() tea.Cmd {
 // https://github.com/charmbracelet/bubbletea/tree/master/tutorials/commands/
 
 func (m model) getSourceDatabases() tea.Msg {
-	databases, err := m.storage.getSourceDatabases()
+	var databases databases
+	var err error
+
+	databases.source, err = m.storage.getSourceDatabases()
 	if err != nil {
 		return errMsg{err, "getting source databases"}
 	}
 
-	return getSourceDatabasesMsg(databases)
-}
-
-func (m model) getTargetDatabases() tea.Msg {
-	databases, err := m.storage.getTargetDatabases()
+	databases.target, err = m.storage.getTargetDatabases()
 	if err != nil {
 		return errMsg{err, "getting target databases"}
 	}
 
-	return getTargetDatabasesMsg(databases)
+	return getDatabasesMsg(databases)
 }
 
 func (m model) getCollections() tea.Msg {
 	var collections collections
 	var err error
 
-	collections.target, err = m.storage.getTargetCollections(m.dtcvm.targetDatabases[m.dtcvm.targetDatabaseChoice])
+	collections.target, err = m.storage.getTargetCollections(m.databaseChoices.targetDatabaseChoice)
 	if err != nil {
 		return errMsg{err, "getting target collections"}
 	}
 
-	collections.source, err = m.storage.getSourceCollections(m.dscvm.sourceDatabases[m.dscvm.sourceDatabaseChoice])
+	collections.source, err = m.storage.getSourceCollections(m.databaseChoices.sourceDatabaseChoice)
 	if err != nil {
 		return errMsg{err, "getting source collections"}
 	}
@@ -181,9 +192,9 @@ func (m model) copyData() []tea.Cmd {
 	var err error
 	var cmds []tea.Cmd
 
-	for _, c := range m.cctvm.copyTasks {
+	for _, c := range m.collectionChoices.copyTasks {
 		cmd := func() tea.Msg {
-			err = m.storage.copy(c.source, c.target, m.dscvm.sourceDatabases[m.dscvm.sourceDatabaseChoice], m.dtcvm.targetDatabases[m.dtcvm.targetDatabaseChoice])
+			err = m.storage.copy(c.source, c.target, m.databaseChoices.sourceDatabaseChoice, m.databaseChoices.targetDatabaseChoice)
 			if err != nil {
 				return errMsg{err, "copying records"}
 			}
@@ -206,25 +217,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// Make sure these keys always quit
 		k := msg.String()
-		if k == "q" || k == "esc" || k == "ctrl+c" {
+		if k == "q" || k == "ctrl+c" {
 			m.quitting = true
 			return m, tea.Quit
 		}
-	case getSourceDatabasesMsg:
-		m.dscvm.sourceDatabases = msg
-		return m, tea.ClearScreen
-	case getTargetDatabasesMsg:
-		m.dtcvm.targetDatabases = msg
+	case getDatabasesMsg:
+		m.databaseChoices.sourceDatabases = msg.source
+		m.databaseChoices.targetDatabases = msg.target
+		m.buildSourceDatabaseTableRows()
+		m.buildTargetDatabaseTableRows()
 		return m, tea.ClearScreen
 	case getCollectionsMsg:
-		m.dscvm.sourceCollections = msg.source
-		m.dtcvm.targetCollections = msg.target
+		m.databaseChoices.sourceCollections = msg.source
+		m.databaseChoices.targetCollections = msg.target
 		m.buildCollectionTableRows()
 		return m, tea.ClearScreen
 	case copyMsg:
-		for i := 0; i < len(m.cctvm.copyTasks); i++ {
-			if msg.collectionId == m.cctvm.copyTasks[i].id {
-				m.cctvm.copyTasks[i].complete = true
+		for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
+			if msg.collectionId == m.collectionChoices.copyTasks[i].id {
+				m.collectionChoices.copyTasks[i].complete = true
 			}
 		}
 		return m, nil
@@ -233,8 +244,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd  tea.Cmd
 			cmds []tea.Cmd
 		)
-		for i := 0; i < len(m.cctvm.copyTasks); i++ {
-			m.cctvm.copyTasks[i].spinner, cmd = m.cctvm.copyTasks[i].spinner.Update(msg)
+		for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
+			m.collectionChoices.copyTasks[i].spinner, cmd = m.collectionChoices.copyTasks[i].spinner.Update(msg)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -249,11 +260,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Hand off the message and model to the appropriate update function for the
 	// appropriate view based on the current state.
-	if !m.dscvm.sourceDatabaseChosen {
-		return updateSourceDatabaseChoices(msg, m)
-	} else if !m.dtcvm.targetDatabaseChosen {
-		return updateTargetDatabaseChoices(msg, m)
-	} else if !m.cctvm.collectionsChosen {
+	if !(m.databaseChoices.databasesChosen) {
+		return updateDatabaseChoices(msg, m)
+	} else if !m.collectionChoices.collectionsChosen {
 		return updateCollectionChoiceTable(msg, m)
 	}
 
@@ -261,51 +270,89 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // Update loop for the first view where you're choosing a database.
-func updateSourceDatabaseChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
+func updateDatabaseChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "down":
-			m.dscvm.sourceDatabaseChoice++
-			if m.dscvm.sourceDatabaseChoice >= len(m.dscvm.sourceDatabases) {
-				m.dscvm.sourceDatabaseChoice = len(m.dscvm.sourceDatabases) - 1
+		case " ":
+			if m.databaseChoices.sourceTable.GetFocused() {
+				m.databaseChoices.currentTableIndex++
+				row := m.databaseChoices.sourceTable.HighlightedRow()
+
+				var value = row.Data[sourceDatabasesColumnName].(string)
+				m.databaseChoices.sourceDatabaseChoice = value
+
+				m.databaseChoices.sourceTable = m.databaseChoices.sourceTable.Focused(false)
+				m.databaseChoices.targetTable = m.databaseChoices.targetTable.Focused(true)
+
+			} else if m.databaseChoices.targetTable.GetFocused() {
+				m.databaseChoices.currentTableIndex++
+				row := m.databaseChoices.targetTable.HighlightedRow()
+				var value = row.Data[targetDatabasesColumnName].(string)
+				m.databaseChoices.targetDatabaseChoice = value
+
+				m.databaseChoices.databasesChosen = true
+
+				return m, m.getCollections
 			}
-		case "up":
-			m.dscvm.sourceDatabaseChoice--
-			if m.dscvm.sourceDatabaseChoice < 0 {
-				m.dscvm.sourceDatabaseChoice = 0
+		case "/":
+			// Set as as filtered so we can update the UI to give a clue before user input
+			if m.databaseChoices.sourceTable.GetFocused() {
+				m.databaseChoices.sourceTableFiltered = true
+			} else if m.databaseChoices.targetTable.GetFocused() {
+				m.databaseChoices.targetTableFiltered = true
 			}
-		case "enter":
-			m.dscvm.sourceDatabaseChosen = true
-			return m, m.getTargetDatabases
+		case "esc":
+			if m.databaseChoices.sourceTable.GetFocused() {
+				m.databaseChoices.sourceTableFiltered = false
+			} else if m.databaseChoices.targetTable.GetFocused() {
+				m.databaseChoices.targetTableFiltered = false
+			}
 		}
 	}
 
-	return m, nil
-}
+	m.databaseChoices.targetTable, cmd = m.databaseChoices.targetTable.Update(msg)
+	cmds = append(cmds, cmd)
 
-// Update loop for the first view where you're choosing a database.
-func updateTargetDatabaseChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "down":
-			m.dtcvm.targetDatabaseChoice++
-			if m.dtcvm.targetDatabaseChoice >= len(m.dtcvm.targetDatabases) {
-				m.dtcvm.targetDatabaseChoice = len(m.dtcvm.targetDatabases) - 1
-			}
-		case "up":
-			m.dtcvm.targetDatabaseChoice--
-			if m.dtcvm.targetDatabaseChoice < 0 {
-				m.dtcvm.targetDatabaseChoice = 0
-			}
-		case "enter":
-			m.dtcvm.targetDatabaseChosen = true
-			return m, m.getCollections
-		}
+	m.databaseChoices.sourceTable, cmd = m.databaseChoices.sourceTable.Update(msg)
+	cmds = append(cmds, cmd)
+
+	var stfilterText string
+	if len(m.databaseChoices.sourceTable.GetCurrentFilter()) > 0 || m.databaseChoices.sourceTableFiltered {
+		stfilterText = fmt.Sprintf("\nFilter: %s", m.databaseChoices.sourceTable.GetCurrentFilter())
 	}
 
-	return m, nil
+	// Add Custom footers
+	m.databaseChoices.sourceTable = m.databaseChoices.sourceTable.WithStaticFooter(
+		fmt.Sprintf("Page %d/%d \nCollections %d \n%s",
+			m.databaseChoices.sourceTable.CurrentPage(),
+			m.databaseChoices.sourceTable.MaxPages(),
+			m.databaseChoices.sourceTable.TotalRows(),
+			stfilterText),
+	)
+
+	var ttfilterText string
+	if len(m.databaseChoices.targetTable.GetCurrentFilter()) > 0 || m.databaseChoices.targetTableFiltered {
+		ttfilterText = fmt.Sprintf("\nFilter: %s", m.databaseChoices.targetTable.GetCurrentFilter())
+	} else {
+		ttfilterText = ""
+	}
+
+	m.databaseChoices.targetTable = m.databaseChoices.targetTable.WithStaticFooter(
+		fmt.Sprintf("Page %d/%d \nCollections %d \n%s",
+			m.databaseChoices.targetTable.CurrentPage(),
+			m.databaseChoices.targetTable.MaxPages(),
+			m.databaseChoices.targetTable.TotalRows(),
+			ttfilterText,
+		),
+	)
+
+	return m, tea.Batch(cmds...)
 }
 
 func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
@@ -317,40 +364,37 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc", "q":
-			cmds = append(cmds, tea.Quit)
-
 		case "a":
-			m.cctvm.sourceTable = m.cctvm.sourceTable.Focused(true)
-			m.cctvm.targetTable = m.cctvm.targetTable.Focused(false)
-			m.cctvm.copyTaskTable = m.cctvm.copyTaskTable.Focused(false)
+			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(true)
+			m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
+			m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(false)
 
 		case "b":
-			m.cctvm.sourceTable = m.cctvm.sourceTable.Focused(false)
-			m.cctvm.targetTable = m.cctvm.targetTable.Focused(true)
-			m.cctvm.copyTaskTable = m.cctvm.copyTaskTable.Focused(false)
+			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(false)
+			m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(true)
+			m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(false)
 
 		case "enter":
-			if len(m.cctvm.copyTasks) != 0 {
-				m.cctvm.sourceTable = m.cctvm.sourceTable.Focused(false)
-				m.cctvm.targetTable = m.cctvm.targetTable.Focused(false)
-				m.cctvm.copyTaskTable = m.cctvm.copyTaskTable.Focused(true)
+			if len(m.collectionChoices.copyTasks) != 0 {
+				m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(false)
+				m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
+				m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(true)
 			}
 
 		case "s":
-			if len(m.cctvm.copyTasks) == 0 {
+			if len(m.collectionChoices.copyTasks) == 0 {
 				return m, nil
 			}
 
-			m.cctvm.collectionsChosen = true
+			m.collectionChoices.collectionsChosen = true
 
 			var cmds []tea.Cmd
 			var c = m.copyData()
 			cmds = append(cmds, c...)
 
-			for i := 0; i < len(m.cctvm.copyTasks); i++ {
+			for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
 				cmd := func() tea.Msg {
-					return m.cctvm.copyTasks[i].spinner.Tick()
+					return m.collectionChoices.copyTasks[i].spinner.Tick()
 				}
 
 				cmds = append(cmds, cmd)
@@ -359,100 +403,142 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 
 		case "u":
-			m.cctvm.sourceTable = m.cctvm.sourceTable.WithPageSize(m.cctvm.sourceTable.PageSize() - 1)
-			m.cctvm.targetTable = m.cctvm.targetTable.WithPageSize(m.cctvm.targetTable.PageSize() - 1)
+			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithPageSize(m.collectionChoices.sourceTable.PageSize() - 1)
+			m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithPageSize(m.collectionChoices.targetTable.PageSize() - 1)
 
 		case "i":
-			m.cctvm.sourceTable = m.cctvm.sourceTable.WithPageSize(m.cctvm.sourceTable.PageSize() + 1)
-			m.cctvm.targetTable = m.cctvm.targetTable.WithPageSize(m.cctvm.targetTable.PageSize() + 1)
+			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithPageSize(m.collectionChoices.sourceTable.PageSize() + 1)
+			m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithPageSize(m.collectionChoices.targetTable.PageSize() + 1)
 
 		case "r":
-			m.cctvm.sourceTable = m.cctvm.sourceTable.WithCurrentPage(rand.Intn(m.cctvm.sourceTable.MaxPages()) + 1)
-			m.cctvm.targetTable = m.cctvm.targetTable.WithCurrentPage(rand.Intn(m.cctvm.targetTable.MaxPages()) + 1)
+			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithCurrentPage(rand.Intn(m.collectionChoices.sourceTable.MaxPages()) + 1)
+			m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithCurrentPage(rand.Intn(m.collectionChoices.targetTable.MaxPages()) + 1)
 
 		case "z":
-			if m.cctvm.rowCount < 10 {
+			if m.collectionChoices.rowCount < 10 {
 				break
 			}
 
-			m.cctvm.rowCount -= 10
+			m.collectionChoices.rowCount -= 10
 			m.buildCollectionTableRows()
 
 		case "x":
-			m.cctvm.rowCount += 10
+			m.collectionChoices.rowCount += 10
 			m.buildCollectionTableRows()
 
 		case "delete":
 			// Only delete form copy map table
-			if m.cctvm.currentTableIndex == 2 {
+			if m.collectionChoices.currentTableIndex == 2 {
 				//Todo Delete mappings
 			}
 
 		case " ":
-			if m.cctvm.sourceTable.GetFocused() {
-				m.cctvm.currentTableIndex++
-				row := m.cctvm.sourceTable.HighlightedRow()
+			if m.collectionChoices.sourceTable.GetFocused() {
+				m.collectionChoices.currentTableIndex++
+				row := m.collectionChoices.sourceTable.HighlightedRow()
 
-				var value = row.Data[sourceColumnName].(string)
-				m.cctvm.currentCopyTask.source = value
-
-				// Delete collection so it can't be selected again
-				var i = m.cctvm.sourceTable.GetHighlightedRowIndex()
-				m.dscvm.sourceCollections = removeItem(m.dscvm.sourceCollections, i)
-				m.buildCollectionTableRows()
-				m.cctvm.sourceTable = m.cctvm.sourceTable.Focused(false)
-				m.cctvm.targetTable = m.cctvm.targetTable.Focused(true)
-
-			} else if m.cctvm.targetTable.GetFocused() {
-				m.cctvm.currentTableIndex++
-				row := m.cctvm.targetTable.HighlightedRow()
-				var value = row.Data[targetColumnName].(string)
-				m.cctvm.currentCopyTask.target = value
+				var value = row.Data[sourceCollectionsColumnName].(string)
+				m.collectionChoices.currentCopyTask.source = value
 
 				// Delete collection so it can't be selected again
-				var i = m.cctvm.targetTable.GetHighlightedRowIndex()
-				m.dtcvm.targetCollections = removeItem(m.dtcvm.targetCollections, i)
+				var i = m.collectionChoices.sourceTable.GetHighlightedRowIndex()
+				m.databaseChoices.sourceCollections = removeItem(m.databaseChoices.sourceCollections, i)
 				m.buildCollectionTableRows()
-				m.cctvm.sourceTable = m.cctvm.sourceTable.Focused(true)
-				m.cctvm.targetTable = m.cctvm.targetTable.Focused(false)
+				m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(false)
+				m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(true)
+
+			} else if m.collectionChoices.targetTable.GetFocused() {
+				m.collectionChoices.currentTableIndex++
+				row := m.collectionChoices.targetTable.HighlightedRow()
+				var value = row.Data[targetCollectionsColumnName].(string)
+				m.collectionChoices.currentCopyTask.target = value
+
+				// Delete collection so it can't be selected again
+				var i = m.collectionChoices.targetTable.GetHighlightedRowIndex()
+				m.databaseChoices.targetCollections = removeItem(m.databaseChoices.targetCollections, i)
+				m.buildCollectionTableRows()
+				m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(true)
+				m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
 			}
 
 			// User has chose target and source, so add to copy map
-			if m.cctvm.currentTableIndex == 2 {
-				m.cctvm.copyTasks = append(m.cctvm.copyTasks, m.cctvm.currentCopyTask)
+			if m.collectionChoices.currentTableIndex == 2 {
+				m.collectionChoices.copyTasks = append(m.collectionChoices.copyTasks, m.collectionChoices.currentCopyTask)
 				m.buildCollectionMapRows()
-				m.cctvm.currentTableIndex = 0
+				m.collectionChoices.currentTableIndex = 0
 			}
 
 			// No more viable copy maps to be selected
-			if len(m.dscvm.sourceCollections) == 0 && len(m.dtcvm.targetCollections) == 0 {
-				m.cctvm.sourceTable = m.cctvm.sourceTable.Focused(false)
-				m.cctvm.targetTable = m.cctvm.targetTable.Focused(false)
-				m.cctvm.copyTaskTable = m.cctvm.copyTaskTable.Focused(true)
+			if len(m.databaseChoices.sourceCollections) == 0 && len(m.databaseChoices.targetCollections) == 0 {
+				m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(false)
+				m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
+				m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(true)
+			}
+
+		case "/":
+			// Set as as filtered so we can update the UI to give a clue before user input
+			if m.collectionChoices.sourceTable.GetFocused() {
+				m.collectionChoices.sourceTableFiltered = true
+			} else if m.collectionChoices.targetTable.GetFocused() {
+				m.collectionChoices.targetTableFiltered = true
+			}
+		case "esc":
+			if m.collectionChoices.sourceTable.GetFocused() {
+				m.collectionChoices.sourceTableFiltered = false
+			} else if m.collectionChoices.targetTable.GetFocused() {
+				m.collectionChoices.targetTableFiltered = false
 			}
 		}
 	}
 
-	m.cctvm.targetTable, cmd = m.cctvm.targetTable.Update(msg)
+	m.collectionChoices.targetTable, cmd = m.collectionChoices.targetTable.Update(msg)
 	cmds = append(cmds, cmd)
 
-	m.cctvm.sourceTable, cmd = m.cctvm.sourceTable.Update(msg)
+	m.collectionChoices.sourceTable, cmd = m.collectionChoices.sourceTable.Update(msg)
 	cmds = append(cmds, cmd)
 
-	m.cctvm.copyTaskTable, cmd = m.cctvm.copyTaskTable.Update(msg)
+	m.collectionChoices.copyTaskTable, cmd = m.collectionChoices.copyTaskTable.Update(msg)
 	cmds = append(cmds, cmd)
 
 	// Add Custom footers
-	m.cctvm.sourceTable = m.cctvm.sourceTable.WithStaticFooter(
-		fmt.Sprintf("Page %d/%d \nCollections %d", m.cctvm.sourceTable.CurrentPage(), m.cctvm.sourceTable.MaxPages(), m.cctvm.sourceTable.TotalRows()),
+
+	var stfilterText string
+	if len(m.collectionChoices.sourceTable.GetCurrentFilter()) > 0 || m.collectionChoices.sourceTableFiltered {
+		stfilterText = fmt.Sprintf("\nFilter: %s", m.collectionChoices.sourceTable.GetCurrentFilter())
+	}
+
+	m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithStaticFooter(
+		fmt.Sprintf("Page %d/%d \nCollections %d \n%s",
+			m.collectionChoices.sourceTable.CurrentPage(),
+			m.collectionChoices.sourceTable.MaxPages(),
+			m.collectionChoices.sourceTable.TotalRows(),
+			stfilterText),
 	)
 
-	m.cctvm.targetTable = m.cctvm.targetTable.WithStaticFooter(
-		fmt.Sprintf("Page %d/%d \nCollections %d", m.cctvm.targetTable.CurrentPage(), m.cctvm.targetTable.MaxPages(), m.cctvm.targetTable.TotalRows()),
+	var ttfilterText string
+	if len(m.collectionChoices.targetTable.GetCurrentFilter()) > 0 || m.collectionChoices.targetTableFiltered {
+		ttfilterText = fmt.Sprintf("\nFilter: %s", m.collectionChoices.targetTable.GetCurrentFilter())
+	}
+
+	m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithStaticFooter(
+		fmt.Sprintf("Page %d/%d \nCollections %d \n%s",
+			m.collectionChoices.targetTable.CurrentPage(),
+			m.collectionChoices.targetTable.MaxPages(),
+			m.collectionChoices.targetTable.TotalRows(),
+			ttfilterText),
 	)
 
-	m.cctvm.copyTaskTable = m.cctvm.copyTaskTable.WithStaticFooter(
-		fmt.Sprintf("Page %d/%d \nMaps Selected %d", m.cctvm.copyTaskTable.CurrentPage(), m.cctvm.copyTaskTable.MaxPages(), m.cctvm.copyTaskTable.TotalRows()),
+	var cttfilterText string
+	if len(m.collectionChoices.copyTaskTable.GetCurrentFilter()) > 0 {
+		cttfilterText = fmt.Sprintf("\nFilter: %s", m.collectionChoices.copyTaskTable.GetCurrentFilter())
+	}
+
+	m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.WithStaticFooter(
+		fmt.Sprintf("Page %d/%d \nMaps Selected %d \n%s",
+			m.collectionChoices.copyTaskTable.CurrentPage(),
+			m.collectionChoices.copyTaskTable.MaxPages(),
+			m.collectionChoices.copyTaskTable.TotalRows(),
+			cttfilterText),
 	)
 
 	return m, tea.Batch(cmds...)
@@ -465,7 +551,7 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 func errorView(m model) string {
 	tpl := "\nA fatal error occured while %s\n"
 	tpl += "%s\n%s\n\n"
-	tpl += subtleStyle.Render("q, esc: quit")
+	tpl += subtleStyle.Render("q: quit")
 
 	return fmt.Sprintf(tpl, m.fatalError.context, errorImage, "Error Message: "+keywordStyle.Render(m.fatalError.text))
 }
@@ -478,11 +564,9 @@ func (m model) View() string {
 	}
 	if m.fatalError != nil {
 		return errorView(m)
-	} else if !m.dscvm.sourceDatabaseChosen {
-		s = databaseSourceChoicesView(m)
-	} else if !m.dtcvm.targetDatabaseChosen {
-		s = databaseTargetChoicesView(m)
-	} else if !m.cctvm.collectionsChosen {
+	} else if !m.databaseChoices.databasesChosen {
+		s = databaseChoicesView(m)
+	} else if !m.collectionChoices.collectionsChosen {
 		s = collectionChoiceTableView(m)
 	} else {
 		s = copyStatusView(m)
@@ -491,50 +575,42 @@ func (m model) View() string {
 }
 
 // The first view where user is chosing a source database
-func databaseSourceChoicesView(m model) string {
-	tpl := bannerStyle.Render(banner) + "\n"
-	tpl += "Choose the " + keywordStyle.Render("source") + " database\n\n"
-	tpl += "%s\n\n"
-	tpl += subtleStyle.Render("up/down: select") + dotStyle +
-		subtleStyle.Render("enter: choose") + dotStyle +
-		subtleStyle.Render("q, esc: quit")
-
-	var choices string
-	for i, choice := range m.dscvm.sourceDatabases {
-		choices += fmt.Sprintf("%s\n", checkbox(choice, m.dscvm.sourceDatabaseChoice == i))
-	}
-
-	return fmt.Sprintf(tpl, choices)
-}
-
-// The second view where user is chosing a target database
-func databaseTargetChoicesView(m model) string {
-	tpl := bannerStyle.Render(banner) + "\n"
-	tpl += "Choose the " + keywordStyle.Render("target") + " database\n\n"
-	tpl += "%s\n\n"
-	tpl += subtleStyle.Render("up/down: select") + dotStyle +
-		subtleStyle.Render("enter: choose") + dotStyle +
-		subtleStyle.Render("q, esc: quit")
-
-	var choices string
-	for i, choice := range m.dtcvm.targetDatabases {
-		choices += fmt.Sprintf("%s\n", checkbox(choice, m.dtcvm.targetDatabaseChoice == i))
-	}
-
-	return fmt.Sprintf(tpl, choices)
-}
-
-// The third view where use is choosing source and target collections
-func collectionChoiceTableView(m model) string {
-	tpl := bannerStyle.Render(banner) + "\n"
-	tpl += "Map where the data lives and what collection it should be transfered to. You can choose one or more mappings.\n\n"
+func databaseChoicesView(m model) string {
+	tpl := green.Render(banner) + "\n"
+	tpl += "Choose the databases where the source and target collections reside \n\n"
 	tpl += "%s\n\n"
 	tpl += subtleStyle.Render("up/down: change selection") + "\n" +
 		subtleStyle.Render("left/right: change page") + "\n" +
 		subtleStyle.Render("space: choose collection") + "\n" +
+		subtleStyle.Render("/: enter filter table mode") + "\n" +
+		subtleStyle.Render("esc: exit filter table mode") + "\n" +
+		subtleStyle.Render("q: quit")
+
+	pad := lipgloss.NewStyle().Padding(1)
+
+	tables := []string{
+		lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.databaseChoices.sourceTable.View())),
+		lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.databaseChoices.targetTable.View())),
+	}
+
+	var t = lipgloss.JoinHorizontal(lipgloss.Top, tables...)
+
+	return fmt.Sprintf(tpl, t)
+}
+
+// The third view where use is choosing source and target collections
+func collectionChoiceTableView(m model) string {
+	tpl := green.Render(banner) + "\n"
+	tpl += "Select one more more pairs of source and target collections and we'll handle the move once you are finshed\n\n"
+	tpl += "%s\n\n"
+	tpl += subtleStyle.Render("up/down: change selection") + "\n" +
+		subtleStyle.Render("left/right: change page") + "\n" +
+		subtleStyle.Render("space: choose collection") + "\n" +
+		subtleStyle.Render("/: enter filter table mode") + "\n" +
+		subtleStyle.Render("esc: exit filter table mode") + "\n" +
 		subtleStyle.Render("enter: edit copy map") + "\n" +
-		subtleStyle.Render("del: remove mapping (Copy table only)") + "\n"
-	subtleStyle.Render("q, esc: quit")
+		subtleStyle.Render("del: remove mapping (Copy table only)") + "\n" +
+		subtleStyle.Render("q: quit")
 
 	//body := strings.Builder{}
 
@@ -544,9 +620,9 @@ func collectionChoiceTableView(m model) string {
 	pad := lipgloss.NewStyle().Padding(1)
 
 	tables := []string{
-		lipgloss.JoinVertical(lipgloss.Center, "Choose source", pad.Render(m.cctvm.sourceTable.View())),
-		lipgloss.JoinVertical(lipgloss.Center, "Choose target", pad.Render(m.cctvm.targetTable.View())),
-		lipgloss.JoinVertical(lipgloss.Center, "Collection Copy Map", pad.Render(m.cctvm.copyTaskTable.View())),
+		lipgloss.JoinVertical(lipgloss.Center, " ", pad.Render(m.collectionChoices.sourceTable.View())),
+		lipgloss.JoinVertical(lipgloss.Center, " ", pad.Render(m.collectionChoices.targetTable.View())),
+		lipgloss.JoinVertical(lipgloss.Center, "Collection Copy Map", pad.Render(m.collectionChoices.copyTaskTable.View())),
 	}
 
 	var t = lipgloss.JoinHorizontal(lipgloss.Top, tables...)
@@ -558,32 +634,23 @@ func collectionChoiceTableView(m model) string {
 func copyStatusView(m model) string {
 	var progress, label string
 	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render
-	tpl := bannerStyle.Render(banner) + "\n"
-	tpl += fmt.Sprintf("Copying data to target database (%s)\n", keywordStyle.Render(m.dtcvm.targetDatabases[m.dtcvm.targetDatabaseChoice]))
+	tpl := green.Render(banner) + "\n"
+	tpl += fmt.Sprintf("Copying data to target database (%s)\n", keywordStyle.Render(m.databaseChoices.targetDatabaseChoice))
 	tpl += "%s\n\n\n"
-	tpl += subtleStyle.Render("q, esc: quit")
+	tpl += subtleStyle.Render("q: quit")
 
-	for i := 0; i < len(m.cctvm.copyTasks); i++ {
+	for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
 
 		label = "Copying..."
-		spinner := fmt.Sprintf("%s %s", m.cctvm.copyTasks[i].spinner.View(), textStyle(label))
-		if m.cctvm.copyTasks[i].complete {
+		spinner := fmt.Sprintf("%s %s", m.collectionChoices.copyTasks[i].spinner.View(), textStyle(label))
+		if m.collectionChoices.copyTasks[i].complete {
 			label = "Done"
 			spinner = fmt.Sprintf("%s %s", "✅", textStyle(label))
 		}
-		progress += "\n\n" + keywordStyle.Render(m.cctvm.copyTasks[i].source+" -> "+m.cctvm.copyTasks[i].target) + " - " + spinner
+		progress += "\n\n" + keywordStyle.Render(m.collectionChoices.copyTasks[i].source+" -> "+m.collectionChoices.copyTasks[i].target) + " - " + spinner
 	}
 
 	return fmt.Sprintf(tpl, progress)
-}
-
-// Components
-
-func checkbox(label string, checked bool) string {
-	if checked {
-		return checkboxStyle.Render("[x] " + label)
-	}
-	return fmt.Sprintf("[ ] %s", label)
 }
 
 // Utils
@@ -612,12 +679,14 @@ func buildTable(columns ...string) table.Model {
 
 	for i := 0; i < len(columns); i++ {
 		columnName := columns[i]
-		c = append(c, table.NewColumn(columnName, columnName, 20))
+		c = append(c, table.NewColumn(columnName, columnName, 25).
+			WithFiltered(true))
 	}
 
 	rows := buildRows([]table.RowData{})
 
 	return table.New(c).
+		Filtered(true).
 		WithRows(rows).
 		HighlightStyle(checkboxStyle).
 		HeaderStyle(lipgloss.NewStyle().Bold(true)).
@@ -625,38 +694,63 @@ func buildTable(columns ...string) table.Model {
 			Style: lipgloss.NewStyle().Foreground(lipgloss.Color("#faa")),
 			Data:  "-",
 		})
+
 }
 
 // Build rows for both source and target collection tables
 func (m *model) buildCollectionTableRows() {
 	targetTableData := []table.RowData{}
 
-	for i := 0; i < len(m.dtcvm.targetCollections); i++ {
-		rowData := map[string]interface{}{targetColumnName: m.dtcvm.targetCollections[i]}
+	for i := 0; i < len(m.databaseChoices.targetCollections); i++ {
+		rowData := map[string]interface{}{targetCollectionsColumnName: m.databaseChoices.targetCollections[i]}
 		targetTableData = append(targetTableData, rowData)
 	}
 
 	sourceTableData := []table.RowData{}
 
-	for i := 0; i < len(m.dscvm.sourceCollections); i++ {
-		rowData := map[string]interface{}{sourceColumnName: m.dscvm.sourceCollections[i]}
+	for i := 0; i < len(m.databaseChoices.sourceCollections); i++ {
+		rowData := map[string]interface{}{sourceCollectionsColumnName: m.databaseChoices.sourceCollections[i]}
 		sourceTableData = append(sourceTableData, rowData)
 	}
 
-	m.cctvm.targetTable = m.cctvm.targetTable.WithRows(buildRows(targetTableData))
-	m.cctvm.sourceTable = m.cctvm.sourceTable.WithRows(buildRows(sourceTableData))
+	m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithRows(buildRows(targetTableData))
+	m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithRows(buildRows(sourceTableData))
+}
+
+// Build rows for source database tables
+func (m *model) buildSourceDatabaseTableRows() {
+	sourceTableData := []table.RowData{}
+
+	for i := 0; i < len(m.databaseChoices.sourceDatabases); i++ {
+		rowData := map[string]interface{}{sourceDatabasesColumnName: m.databaseChoices.sourceDatabases[i]}
+		sourceTableData = append(sourceTableData, rowData)
+	}
+
+	m.databaseChoices.sourceTable = m.databaseChoices.sourceTable.WithRows(buildRows(sourceTableData))
+}
+
+// Build rows for target database tables
+func (m *model) buildTargetDatabaseTableRows() {
+	targetTableData := []table.RowData{}
+
+	for i := 0; i < len(m.databaseChoices.targetDatabases); i++ {
+		rowData := map[string]interface{}{targetDatabasesColumnName: m.databaseChoices.targetDatabases[i]}
+		targetTableData = append(targetTableData, rowData)
+	}
+
+	m.databaseChoices.targetTable = m.databaseChoices.targetTable.WithRows(buildRows(targetTableData))
 }
 
 // Build rows for copyTask table
 func (m *model) buildCollectionMapRows() {
 	tableData := []table.RowData{}
 
-	for i := 0; i < len(m.cctvm.copyTasks); i++ {
-		rowData := map[string]interface{}{sourceColumnName: m.cctvm.copyTasks[i].source, targetColumnName: m.cctvm.copyTasks[i].target}
+	for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
+		rowData := map[string]interface{}{sourceCollectionsColumnName: m.collectionChoices.copyTasks[i].source, targetCollectionsColumnName: m.collectionChoices.copyTasks[i].target}
 		tableData = append(tableData, rowData)
 	}
 
-	m.cctvm.copyTaskTable = m.cctvm.copyTaskTable.WithRows(buildRows(tableData))
+	m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.WithRows(buildRows(tableData))
 }
 
 // AddRow adds a new row to the table
