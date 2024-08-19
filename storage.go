@@ -14,8 +14,8 @@ type Storage interface {
 	copy(sourceCollection string, targetCollection string, sourceDatabase string, targetDatabase string)
 	getTargetDatabases() ([]string, error)
 	getSourceDatabases() ([]string, error)
-	getTargetCollections(databaseName string) ([]string, error)
-	getSourceCollections(databaseName string) ([]string, error)
+	getTargetCollections(databaseName string) ([]collection, error)
+	getSourceCollections(databaseName string) ([]collection, error)
 }
 
 type storage struct {
@@ -52,7 +52,7 @@ func (s storage) copy(sourceCollection string, targetCollection string, sourceDa
 	tc := tClient.Database(targetDatabase).Collection(targetCollection)
 
 	// Check there are documents to move
-	count, err := sc.CountDocuments(context.Background(), bson.D{})
+	count, err := s.getRecordCount(sClient, sourceDatabase, sourceCollection)
 	if count == 0 {
 		return errors.New("no records in source collection to copy")
 	} else if err != nil {
@@ -86,8 +86,21 @@ func (s storage) copy(sourceCollection string, targetCollection string, sourceDa
 	return nil
 }
 
+func (s storage) getRecordCount(client *mongo.Client, databaseName string, collectionName string) (int64, error) {
+	// Get source and target collections
+	sc := client.Database(databaseName).Collection(collectionName)
+
+	// Check there are documents to move
+	count, err := sc.CountDocuments(context.Background(), bson.D{})
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
 // Get collections from target database.
-func (s storage) getTargetCollections(databaseName string) ([]string, error) {
+func (s storage) getTargetCollections(databaseName string) ([]collection, error) {
 	options := options.Client().ApplyURI(s.sourceURI)
 	client, err := mongo.Connect(context.Background(), options)
 	if err != nil {
@@ -98,16 +111,31 @@ func (s storage) getTargetCollections(databaseName string) ([]string, error) {
 	db := client.Database(databaseName)
 
 	// Retrieve collection names
-	result, err := db.ListCollectionNames(context.TODO(), bson.D{})
+	c, err := db.ListCollectionNames(context.TODO(), bson.D{})
 	if err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	var collections []collection
+
+	for _, name := range c {
+		count, err := s.getRecordCount(client, databaseName, name)
+		if err != nil {
+			return collections, err
+		}
+
+		var collection collection
+		collection.count = count
+		collection.name = name
+		collections = append(collections, collection)
+
+	}
+
+	return collections, nil
 }
 
 // Get collections from source database.
-func (s storage) getSourceCollections(databaseName string) ([]string, error) {
+func (s storage) getSourceCollections(databaseName string) ([]collection, error) {
 	options := options.Client().ApplyURI(s.sourceURI)
 	client, err := mongo.Connect(context.Background(), options)
 	if err != nil {
@@ -118,12 +146,26 @@ func (s storage) getSourceCollections(databaseName string) ([]string, error) {
 	db := client.Database(databaseName)
 
 	// Retrieve collection names
-	result, err := db.ListCollectionNames(context.TODO(), bson.D{})
+	c, err := db.ListCollectionNames(context.TODO(), bson.D{})
 	if err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	var collections []collection
+
+	for _, name := range c {
+		count, err := s.getRecordCount(client, databaseName, name)
+		if err != nil {
+			return collections, err
+		}
+
+		var collection collection
+		collection.count = count
+		collection.name = name
+		collections = append(collections, collection)
+	}
+
+	return collections, nil
 }
 
 // Get all databases from target server provided in config.

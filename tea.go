@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -15,7 +17,9 @@ const (
 	sourceCollectionsColumnName = "Source Collections"
 	targetDatabasesColumnName   = "Target Databases"
 	sourceDatabasesColumnName   = "Source Databases"
-	taskMapColumnsName          = "Collections Map"
+	taskMapColumnName           = "Collections Map"
+	recordsCountColumnName      = "Records"
+	CopyStatusColumnName        = "Copy Status"
 	progressBarWidth            = 71
 	dotChar                     = " • "
 	banner                      = `
@@ -63,9 +67,14 @@ type copyMsg struct {
 	collectionId int
 }
 
+type collection struct {
+	name  string
+	count int64
+}
+
 type collections struct {
-	target []string
-	source []string
+	target []collection
+	source []collection
 }
 
 type databases struct {
@@ -87,8 +96,10 @@ type collectionCopyTask struct {
 }
 
 type (
-	getDatabasesMsg   databases
-	getCollectionsMsg collections
+	getDatabasesMsg      databases
+	databasesLoadedMsg   bool
+	getCollectionsMsg    collections
+	collectionsLoadedMsg bool
 )
 
 type errMsg struct {
@@ -114,41 +125,52 @@ type collectionChoicesViewModel struct {
 	pageSize            int                  // Default size of a page of all tables
 	rowCount            int                  // The amount of rows in a table
 	collectionsChosen   bool                 // Has user made collection choices
+	collectionsLoaded   bool
+	debounce            time.Duration // debounce duraiton for loading spinner
+	altscreen           bool
 }
 
 type databaseChoicesViewModel struct {
-	sourceDatabases         []string    // Databases on server
-	sourceDatabaseChoice    string      // Database chosen by user
-	databasesChosen         bool        // Has user made database selections
-	sourceCollections       []string    // Collections in database
-	sourceCurrentCollection int         // Collection cursor is current on
-	sourcePageSize          int         // Default size of a page of all tables
-	sourceRowCount          int         // The amount of rows in a table
-	sourceTable             table.Model // Table that displays collections in the source database
+	sourceDatabases         []string // Databases on server
+	sourceDatabaseChoice    string   // Database chosen by user
+	databasesChosen         bool     // Has user made database selections
+	databasesLoaded         bool
+	sourceCollections       []collection // Collections in database
+	sourceCurrentCollection int          // Collection cursor is current on
+	sourcePageSize          int          // Default size of a page of all tables
+	sourceRowCount          int          // The amount of rows in a table
+	sourceTable             table.Model  // Table that displays collections in the source database
 	sourceTableFiltered     bool
-	targetDatabases         []string    // Databases on server
-	targetDatabaseChoice    string      // Database chosen by user
-	targetCollections       []string    // Collections in database
-	targetCurrentCollection int         // Collection cursor is current on
-	targetPageSize          int         // Default size of a page of all tables
-	targetRowCount          int         // The amount of rows in a table
-	targetTable             table.Model // Table that displays collections in the target database
+	targetDatabases         []string     // Databases on server
+	targetDatabaseChoice    string       // Database chosen by user
+	targetCollections       []collection // Collections in database
+	targetCurrentCollection int          // Collection cursor is current on
+	targetPageSize          int          // Default size of a page of all tables
+	targetRowCount          int          // The amount of rows in a table
+	targetTable             table.Model  // Table that displays collections in the target database
 	targetTableFiltered     bool
-	currentTableIndex       int // Index of the table is currently in use by user. 0 = sourceTable, 1 = targetTable
+	currentTableIndex       int           // Index of the table is currently in use by user. 0 = sourceTable, 1 = targetTable
+	debounce                time.Duration // debounce duraiton for loading spinner
 }
 
 // Main model
 type model struct {
-	quitting          bool                       // Has user quit application
+	keyBindings       keyModel
 	storage           storage                    // Storage
 	fatalError        *fatalError                // Fatal Error details
 	databaseChoices   databaseChoicesViewModel   // Model for databaseChoicesView view
 	collectionChoices collectionChoicesViewModel // Model for collectionChoicesTable view
+	spinner           spinner.Model
 }
 
 // Init function that returns an initial command for the application to run
 func (m model) Init() tea.Cmd {
-	return m.getSourceDatabases
+
+	var cmds []tea.Cmd
+	cmds = append(cmds, m.spinner.Tick)
+	cmds = append(cmds, m.getSourceDatabases)
+
+	return tea.Batch(cmds...)
 }
 
 // Commands -  Functions that perform some I/O and then return a Msg.
@@ -218,7 +240,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Make sure these keys always quit
 		k := msg.String()
 		if k == "q" || k == "ctrl+c" {
-			m.quitting = true
+			m.keyBindings.quitting = true
 			return m, tea.Quit
 		}
 	case getDatabasesMsg:
@@ -226,11 +248,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.databaseChoices.targetDatabases = msg.target
 		m.buildSourceDatabaseTableRows()
 		m.buildTargetDatabaseTableRows()
+
+		// Debounce spinner
+		return m, tea.Tick(time.Duration(m.databaseChoices.debounce), func(_ time.Time) tea.Msg {
+			return databasesLoadedMsg(true)
+		})
+	case databasesLoadedMsg:
+		m.databaseChoices.databasesLoaded = true
 		return m, tea.ClearScreen
 	case getCollectionsMsg:
 		m.databaseChoices.sourceCollections = msg.source
 		m.databaseChoices.targetCollections = msg.target
 		m.buildCollectionTableRows()
+
+		// Debounce spinner
+		return m, tea.Tick(time.Duration(m.databaseChoices.debounce), func(_ time.Time) tea.Msg {
+			return collectionsLoadedMsg(true)
+		})
+
+	case collectionsLoadedMsg:
+		m.collectionChoices.collectionsLoaded = true
 		return m, tea.ClearScreen
 	case copyMsg:
 		for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
@@ -244,12 +281,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd  tea.Cmd
 			cmds []tea.Cmd
 		)
+
 		for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
 			m.collectionChoices.copyTasks[i].spinner, cmd = m.collectionChoices.copyTasks[i].spinner.Update(msg)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
+
+		m.spinner, cmd = m.spinner.Update(msg)
+		cmds = append(cmds, cmd)
 
 		return m, tea.Batch(cmds...)
 	case errMsg:
@@ -278,8 +319,24 @@ func updateDatabaseChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case " ":
+		switch {
+		case key.Matches(msg, m.keyBindings.keys.QuitFilter):
+			if m.databaseChoices.sourceTable.GetFocused() {
+				m.databaseChoices.sourceTableFiltered = false
+			} else if m.databaseChoices.targetTable.GetFocused() {
+				m.databaseChoices.targetTableFiltered = false
+			}
+		case key.Matches(msg, m.keyBindings.keys.Filter):
+			// Set as as filtered so we can update the UI to give a clue before user input
+			if m.databaseChoices.sourceTable.GetFocused() {
+				m.databaseChoices.sourceTableFiltered = true
+			} else if m.databaseChoices.targetTable.GetFocused() {
+				m.databaseChoices.targetTableFiltered = true
+			}
+		case key.Matches(msg, m.keyBindings.keys.Quit):
+			m.keyBindings.quitting = true
+			return m, tea.Quit
+		case key.Matches(msg, m.keyBindings.keys.Select):
 			if m.databaseChoices.sourceTable.GetFocused() {
 				m.databaseChoices.currentTableIndex++
 				row := m.databaseChoices.sourceTable.HighlightedRow()
@@ -300,20 +357,8 @@ func updateDatabaseChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 				return m, m.getCollections
 			}
-		case "/":
-			// Set as as filtered so we can update the UI to give a clue before user input
-			if m.databaseChoices.sourceTable.GetFocused() {
-				m.databaseChoices.sourceTableFiltered = true
-			} else if m.databaseChoices.targetTable.GetFocused() {
-				m.databaseChoices.targetTableFiltered = true
-			}
-		case "esc":
-			if m.databaseChoices.sourceTable.GetFocused() {
-				m.databaseChoices.sourceTableFiltered = false
-			} else if m.databaseChoices.targetTable.GetFocused() {
-				m.databaseChoices.targetTableFiltered = false
-			}
 		}
+
 	}
 
 	m.databaseChoices.targetTable, cmd = m.databaseChoices.targetTable.Update(msg)
@@ -380,6 +425,15 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
 				m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(true)
 			}
+		case "tab":
+			var cmd tea.Cmd
+			if m.collectionChoices.altscreen {
+				cmd = tea.ExitAltScreen
+			} else {
+				cmd = tea.EnterAltScreen
+			}
+			m.collectionChoices.altscreen = !m.collectionChoices.altscreen
+			return m, cmd
 
 		case "s":
 			if len(m.collectionChoices.copyTasks) == 0 {
@@ -559,7 +613,7 @@ func errorView(m model) string {
 // The orchestrator view, which just calls the appropriate sub-view
 func (m model) View() string {
 	var s string
-	if m.quitting {
+	if m.keyBindings.quitting {
 		return "\n  See you next time!\n\n"
 	}
 	if m.fatalError != nil {
@@ -578,56 +632,59 @@ func (m model) View() string {
 func databaseChoicesView(m model) string {
 	tpl := green.Render(banner) + "\n"
 	tpl += "Choose the databases where the source and target collections reside \n\n"
-	tpl += "%s\n\n"
-	tpl += subtleStyle.Render("up/down: change selection") + "\n" +
-		subtleStyle.Render("left/right: change page") + "\n" +
-		subtleStyle.Render("space: choose collection") + "\n" +
-		subtleStyle.Render("/: enter filter table mode") + "\n" +
-		subtleStyle.Render("esc: exit filter table mode") + "\n" +
-		subtleStyle.Render("q: quit")
+	tpl += "%s"
+	tpl += m.databaseChoicesHelp()
 
-	pad := lipgloss.NewStyle().Padding(1)
-
-	tables := []string{
-		lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.databaseChoices.sourceTable.View())),
-		lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.databaseChoices.targetTable.View())),
+	var view string
+	if !m.databaseChoices.databasesLoaded {
+		spinner := fmt.Sprintf("\n %s%s\n\n", m.spinner.View(), " Fetching databases...")
+		view = lipgloss.PlaceHorizontal(60, lipgloss.Center, spinner)
+	} else {
+		pad := lipgloss.NewStyle().Padding(1)
+		tables := []string{
+			lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.databaseChoices.sourceTable.View())),
+			lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.databaseChoices.targetTable.View())),
+		}
+		view = lipgloss.JoinHorizontal(lipgloss.Top, tables...)
 	}
 
-	var t = lipgloss.JoinHorizontal(lipgloss.Top, tables...)
-
-	return fmt.Sprintf(tpl, t)
+	return fmt.Sprintf(tpl, view)
 }
 
 // The third view where use is choosing source and target collections
 func collectionChoiceTableView(m model) string {
 	tpl := green.Render(banner) + "\n"
-	tpl += "Select one more more pairs of source and target collections and we'll handle the move once you are finshed\n\n"
-	tpl += "%s\n\n"
-	tpl += subtleStyle.Render("up/down: change selection") + "\n" +
-		subtleStyle.Render("left/right: change page") + "\n" +
-		subtleStyle.Render("space: choose collection") + "\n" +
-		subtleStyle.Render("/: enter filter table mode") + "\n" +
-		subtleStyle.Render("esc: exit filter table mode") + "\n" +
-		subtleStyle.Render("enter: edit copy map") + "\n" +
-		subtleStyle.Render("del: remove mapping (Copy table only)") + "\n" +
-		subtleStyle.Render("q: quit")
+	tpl += "%s\n%s"
 
-	//body := strings.Builder{}
-
-	// body.WriteString("Table demo with pagination! Press left/right to move pages, or use page up/down, or 'r' to jump to a random page\nPress 'a' for left table, 'b' for right table\nPress 'z' to reduce rows by 10, 'y' to increase rows by 10\nPress 'u' to decrease page size by 1, 'i' to increase page size by 1\nPress q or ctrl+c to quit\n\n")
-	// body.WriteString("left/right: move pages")
-	// body.WriteString("up/down: page up/down ")
+	var view string
+	var title string
 	pad := lipgloss.NewStyle().Padding(1)
 
-	tables := []string{
-		lipgloss.JoinVertical(lipgloss.Center, " ", pad.Render(m.collectionChoices.sourceTable.View())),
-		lipgloss.JoinVertical(lipgloss.Center, " ", pad.Render(m.collectionChoices.targetTable.View())),
-		lipgloss.JoinVertical(lipgloss.Center, "Collection Copy Map", pad.Render(m.collectionChoices.copyTaskTable.View())),
+	if !m.collectionChoices.collectionsLoaded {
+		title = "Select one more more pairs of source and target collections and we'll handle the move once you are finshed"
+		spinner := fmt.Sprintf("\n %s%s\n\n", m.spinner.View(), " Fetching Collections...")
+		view = lipgloss.PlaceHorizontal(80, lipgloss.Center, spinner)
+		tpl += m.collectionChoicesHelp()
+	} else {
+		var tables []string
+		if m.collectionChoices.altscreen {
+			tpl += m.collectionChoicesCopyHelp()
+			title = "Amend choices or press enter to start coping data"
+			tables = []string{
+				lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.collectionChoices.copyTaskTable.View())),
+			}
+		} else {
+			title = "Select one more more pairs of source and target collections and we'll handle the move once you are finshed"
+			tables = []string{
+				lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.collectionChoices.sourceTable.View())),
+				lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.collectionChoices.targetTable.View())),
+			}
+			tpl += m.collectionChoicesHelp()
+		}
+		view = lipgloss.JoinHorizontal(lipgloss.Top, tables...)
 	}
 
-	var t = lipgloss.JoinHorizontal(lipgloss.Top, tables...)
-
-	return fmt.Sprintf(tpl, t)
+	return fmt.Sprintf(tpl, title, view)
 }
 
 // The final view showing the status of the chosen copy tasks
@@ -637,7 +694,6 @@ func copyStatusView(m model) string {
 	tpl := green.Render(banner) + "\n"
 	tpl += fmt.Sprintf("Copying data to target database (%s)\n", keywordStyle.Render(m.databaseChoices.targetDatabaseChoice))
 	tpl += "%s\n\n\n"
-	tpl += subtleStyle.Render("q: quit")
 
 	for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
 
@@ -702,14 +758,18 @@ func (m *model) buildCollectionTableRows() {
 	targetTableData := []table.RowData{}
 
 	for i := 0; i < len(m.databaseChoices.targetCollections); i++ {
-		rowData := map[string]interface{}{targetCollectionsColumnName: m.databaseChoices.targetCollections[i]}
+		rowData := map[string]interface{}{
+			targetCollectionsColumnName: m.databaseChoices.targetCollections[i].name,
+			recordsCountColumnName:      m.databaseChoices.targetCollections[i].count}
 		targetTableData = append(targetTableData, rowData)
 	}
 
 	sourceTableData := []table.RowData{}
 
 	for i := 0; i < len(m.databaseChoices.sourceCollections); i++ {
-		rowData := map[string]interface{}{sourceCollectionsColumnName: m.databaseChoices.sourceCollections[i]}
+		rowData := map[string]interface{}{
+			sourceCollectionsColumnName: m.databaseChoices.sourceCollections[i].name,
+			recordsCountColumnName:      m.databaseChoices.sourceCollections[i].count}
 		sourceTableData = append(sourceTableData, rowData)
 	}
 
