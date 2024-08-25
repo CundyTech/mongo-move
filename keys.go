@@ -20,10 +20,10 @@ type keyMap struct {
 	DecreasePageSize key.Binding
 	IncreaseRows     key.Binding
 	DecreaseRows     key.Binding
-	DeleteCopyTask   key.Binding
 	ToggleAltView    key.Binding
 	StartCopy        key.Binding
 	EditCopyTasks    key.Binding
+	Restart          key.Binding
 }
 
 type keyModel struct {
@@ -68,31 +68,31 @@ var keys = keyMap{
 	),
 	IncreasePageSize: key.NewBinding(
 		key.WithKeys("i"),
-		key.WithHelp("i", "Page size (+1)"),
+		key.WithHelp("i", "page size (+1)"),
 	),
 	DecreasePageSize: key.NewBinding(
 		key.WithKeys("u"),
-		key.WithHelp("u", "Page size (-1)"),
+		key.WithHelp("u", "page size (-1)"),
 	),
 	IncreaseRows: key.NewBinding(
 		key.WithKeys("y"),
-		key.WithHelp("y", "Rows (+10)"),
+		key.WithHelp("y", "rows (+10)"),
 	),
 	DecreaseRows: key.NewBinding(
 		key.WithKeys("z"),
-		key.WithHelp("z", "Row (-10)"),
-	),
-	DeleteCopyTask: key.NewBinding(
-		key.WithKeys("del"),
-		key.WithHelp("del", "Delete Copy Choice"),
+		key.WithHelp("z", "row (-10)"),
 	),
 	StartCopy: key.NewBinding(
 		key.WithKeys("enter"),
-		key.WithHelp("enter", "Start Copy"),
+		key.WithHelp("enter", "start Copy"),
 	),
 	ToggleAltView: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "Toggle view"),
+		key.WithHelp("tab", "toggle view"),
+	),
+	Restart: key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "restart"),
 	),
 }
 
@@ -111,8 +111,8 @@ func (m model) databaseChoicesHelp() string {
 
 	other := subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.QuitFilter.Help().Key+seperator+m.keyBindings.keys.QuitFilter.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n"
+		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
+		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
 
 	help := []string{
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(navigation)),
@@ -140,8 +140,8 @@ func (m model) collectionChoicesHelp() string {
 		subtleStyle.Render(m.keyBindings.keys.QuitFilter.Help().Key+seperator+m.keyBindings.keys.QuitFilter.Help().Desc) + "\n"
 
 	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+m.keyBindings.keys.ToggleAltView.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n"
+		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
+		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
 
 	help := []string{
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(navigation)),
@@ -171,14 +171,28 @@ func (m model) collectionChoicesCopyHelp() string {
 
 	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+m.keyBindings.keys.ToggleAltView.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.StartCopy.Help().Key+seperator+m.keyBindings.keys.StartCopy.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.DeleteCopyTask.Help().Key+seperator+m.keyBindings.keys.DeleteCopyTask.Help().Desc) + "\n"
+		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+"remove") + "\n" +
+		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
 
 	help := []string{
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(navigation)),
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(table)),
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(other)),
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(copy)),
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, help...)
+}
+
+func (m model) RestartHelp() string {
+	pad := lipgloss.NewStyle().Padding(2, 2)
+	seperator := ": "
+
+	quit := subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
+	restart := subtleStyle.Render(m.keyBindings.keys.Restart.Help().Key+seperator+m.keyBindings.keys.Restart.Help().Desc) + "\n"
+	help := []string{
+		lipgloss.JoinVertical(lipgloss.Center, pad.Render(restart)),
+		lipgloss.JoinVertical(lipgloss.Center, pad.Render(quit)),
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, help...)

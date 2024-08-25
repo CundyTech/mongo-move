@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/evertras/bubble-table/table"
 	"github.com/square/exit"
 )
 
@@ -34,16 +35,24 @@ func main() {
 	cctvm.rowCount = 10
 	cctvm.pageSize = 5
 	cctvm.currentTableIndex = 0
-	cctvm.sourceTable = buildTable(sourceCollectionsColumnName, recordsCountColumnName).
+	cctvm.sourceTable = buildTable([]table.Column{
+		table.NewColumn(sourceCollectionsColumnName, sourceCollectionsColumnName, 25),
+		table.NewColumn(recordsCountColumnName, recordsCountColumnName, 10),
+	}).
 		WithPageSize(cctvm.pageSize).
-		Focused(true).
-		SortByAsc(sourceCollectionsColumnName)
-	cctvm.targetTable = buildTable(targetCollectionsColumnName, recordsCountColumnName).
+		Focused(true)
+	cctvm.targetTable = buildTable([]table.Column{
+		table.NewColumn(targetCollectionsColumnName, targetCollectionsColumnName, 25),
+		table.NewColumn(recordsCountColumnName, recordsCountColumnName, 10),
+	}).
 		WithPageSize(cctvm.pageSize).
-		Focused(false).
-		SortByAsc(targetCollectionsColumnName)
-	cctvm.copyTaskTable = buildTable(sourceCollectionsColumnName, targetCollectionsColumnName, CopyStatusColumnName).
-		WithPageSize(5).
+		Focused(false)
+	cctvm.copyTaskTable = buildTable([]table.Column{
+		table.NewColumn(targetCollectionsColumnName, targetCollectionsColumnName, 25),
+		table.NewColumn(targetCollectionsColumnName, targetCollectionsColumnName, 25),
+		table.NewColumn(CopyStatusColumnName, CopyStatusColumnName, 15),
+	}).
+		WithPageSize(cctvm.pageSize).
 		Focused(false)
 	cctvm.copyTasks = []collectionCopyTask{}
 	cctvm.currentCopyTask = collectionCopyTask{}
@@ -51,14 +60,15 @@ func main() {
 	cctvm.altscreen = false
 
 	var dcvm databaseChoicesViewModel
-	dcvm.currentTableIndex = 0
 	dcvm.sourceDatabases = []string{}
 	dcvm.sourceDatabaseChoice = ""
 	dcvm.databasesChosen = false
 	dcvm.sourceCollections = []collection{}
 	dcvm.sourceCurrentCollection = 0
 	dcvm.sourcePageSize = 5
-	dcvm.sourceTable = buildTable(sourceDatabasesColumnName).
+	dcvm.sourceTable = buildTable([]table.Column{
+		table.NewColumn(sourceDatabasesColumnName, sourceDatabasesColumnName, 25),
+	}).
 		WithPageSize(dcvm.sourcePageSize).
 		Focused(true).
 		SortByAsc(sourceDatabasesColumnName)
@@ -67,11 +77,12 @@ func main() {
 	dcvm.targetCollections = []collection{}
 	dcvm.targetCurrentCollection = 0
 	dcvm.targetPageSize = 5
-	dcvm.targetTable = buildTable(targetDatabasesColumnName).
+	dcvm.targetTable = buildTable([]table.Column{
+		table.NewColumn(targetDatabasesColumnName, targetDatabasesColumnName, 25),
+	}).
 		WithPageSize(dcvm.targetPageSize).
 		Focused(false).
 		SortByAsc(targetDatabasesColumnName)
-	dcvm.currentTableIndex = 0
 	dcvm.databasesLoaded = false
 	dcvm.debounce = 2 * time.Second
 
@@ -93,6 +104,7 @@ func main() {
 		spinner.Monkey,
 	}
 
+	// Randomly select a picker each system start
 	var sp = spinner.New()
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
 	sp.Spinner = spinners[math.IntN(8)]
