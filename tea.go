@@ -58,14 +58,8 @@ var (
 	keywordStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("211"))
 	subtleStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	checkboxStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	dotStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(dotChar)
 	mainStyle     = lipgloss.NewStyle().MarginLeft(2)
 )
-
-type copyMsg struct {
-	collectionId int
-	error        error
-}
 
 type collection struct {
 	name  string
@@ -89,8 +83,8 @@ type TableData struct {
 
 type collectionCopyTask struct {
 	id       int
-	target   string
-	source   string
+	target   collection
+	source   collection
 	spinner  spinner.Model
 	complete bool
 }
@@ -100,7 +94,13 @@ type (
 	databasesLoadedMsg   bool
 	getCollectionsMsg    collections
 	collectionsLoadedMsg bool
+	copyCompleteMsg      copyMsg
 )
+
+type copyMsg struct {
+	collectionId int
+	error        error
+}
 
 type errMsg struct {
 	err     error
@@ -215,7 +215,7 @@ func (m model) copyData() []tea.Cmd {
 
 	for _, c := range m.collectionChoices.copyTasks {
 		cmd := func() tea.Msg {
-			err = m.storage.copy(c.source, c.target, m.databaseChoices.sourceDatabaseChoice, m.databaseChoices.targetDatabaseChoice)
+			err = m.storage.copy(c.source.name, c.target.name, m.databaseChoices.sourceDatabaseChoice, m.databaseChoices.targetDatabaseChoice)
 			if err != nil {
 				return copyMsg{collectionId: c.id, error: err}
 			}
@@ -240,7 +240,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// Make sure these keys always quit
 		k := msg.String()
-		if k == "q" || k == "ctrl+c" {
+		if k == "ctrl+c" {
 			m.keyBindings.quitting = true
 			return m, tea.Quit
 		}
@@ -272,15 +272,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case copyMsg:
 		// Debounce table update
 		return m, tea.Tick(time.Duration(m.collectionChoices.debounce), func(_ time.Time) tea.Msg {
-			for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
-				if msg.collectionId == m.collectionChoices.copyTasks[i].id {
-					m.collectionChoices.copyTasks[i].complete = true
-					m.collectionChoices.collectionsCopied = m.IsCopyTasksComplete()
-					fmt.Println(m.collectionChoices.collectionsCopied)
-				}
-			}
-			return m
+			return copyCompleteMsg(msg)
 		})
+	case copyCompleteMsg:
+		for i := 0; i < len(m.collectionChoices.copyTasks); i++ {
+			if msg.collectionId == m.collectionChoices.copyTasks[i].id {
+				m.collectionChoices.copyTasks[i].complete = true
+				m.collectionChoices.collectionsCopied = m.IsCopyTasksComplete()
+			}
+			m.buildCollectionMapRows()
+		}
+
 	case spinner.TickMsg:
 		var (
 			cmd  tea.Cmd
@@ -298,8 +300,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if m.collectionChoices.CopyStarted {
 			// copy started spinners
 			for _, v := range m.collectionChoices.copyTasks {
-				m.spinner, cmd = v.spinner.Update(msg)
-				cmds = append(cmds, cmd)
+				if v.id == msg.ID {
+					m.spinner, cmd = v.spinner.Update(msg)
+					cmds = append(cmds, cmd)
+				}
 			}
 
 			m.buildCollectionMapRows()
@@ -497,8 +501,10 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 					row := m.collectionChoices.sourceTable.HighlightedRow()
 					// Set source collection in current copy task
-					var value = row.Data[sourceCollectionsColumnName].(string)
-					m.collectionChoices.currentCopyTask.source = value
+					var name = row.Data[sourceCollectionsColumnName].(string)
+					var count = row.Data[recordsCountColumnName].(int64)
+					col := collection{name: name, count: count}
+					m.collectionChoices.currentCopyTask.source = col
 					m.buildCollectionTableRows()
 
 					// Delete collection so it can't be selected again
@@ -514,8 +520,10 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				if m.collectionChoices.targetTable.TotalRows() > 0 {
 					// Set target collection in current copy task
 					row := m.collectionChoices.targetTable.HighlightedRow()
-					var value = row.Data[targetCollectionsColumnName].(string)
-					m.collectionChoices.currentCopyTask.target = value
+					var name = row.Data[targetCollectionsColumnName].(string)
+					var count = row.Data[recordsCountColumnName].(int64)
+					col := collection{name: name, count: count}
+					m.collectionChoices.currentCopyTask.target = col
 					m.buildCollectionMapRows()
 
 					// Delete collection so it can't be selected again
@@ -524,11 +532,10 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 					m.buildCollectionTableRows()
 
 					// Set an individual spinner for each task
-					m.collectionChoices.currentCopyTask.spinner = spinner.New(spinner.WithSpinner(spinner.Ellipsis))
+					m.collectionChoices.currentCopyTask.spinner = spinner.New(spinner.WithSpinner(spinner.Line))
 					m.collectionChoices.currentCopyTask.id = m.collectionChoices.currentCopyTask.spinner.ID()
 					m.collectionChoices.copyTasks = append(m.collectionChoices.copyTasks, m.collectionChoices.currentCopyTask)
 					m.buildCollectionMapRows()
-					m.collectionChoices.currentTableIndex = 0
 
 					// No more viable copy maps to be selected so switch to copy task view
 					if m.collectionChoices.targetTable.TotalRows() == 0 {
@@ -550,14 +557,11 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 					// Delete selected copy task
 					row := m.collectionChoices.copyTaskTable.HighlightedRow()
 					var i = m.collectionChoices.copyTaskTable.GetHighlightedRowIndex()
-					var target = row.Data[targetCollectionsColumnName].(string)
-					var source = row.Data[sourceCollectionsColumnName].(string)
+					var target = row.Data[targetCollectionsColumnName].(collection)
+					var source = row.Data[sourceCollectionsColumnName].(collection)
 
-					t := collection{name: target}
-					m.databaseChoices.targetCollections = append(m.databaseChoices.targetCollections, t)
-					s := collection{name: source}
-					m.databaseChoices.sourceCollections = append(m.databaseChoices.sourceCollections, s)
-
+					m.databaseChoices.targetCollections = append(m.databaseChoices.targetCollections, target)
+					m.databaseChoices.sourceCollections = append(m.databaseChoices.sourceCollections, source)
 					m.collectionChoices.copyTasks = removeItem(m.collectionChoices.copyTasks, i)
 
 					m.buildCollectionTableRows()
@@ -681,8 +685,8 @@ func (m model) View() string {
 // The first view where user is chosing a source database
 func databaseChoicesView(m model) string {
 	tpl := green.Render(banner) + "\n"
-	tpl += "Choose the databases where the source and target collections reside \n\n"
-	tpl += "%s"
+	tpl += "Choose the target and source databases"
+	tpl += "\n\n%s"
 	tpl += m.databaseChoicesHelp()
 
 	var view string
@@ -713,7 +717,7 @@ func collectionChoiceTableView(m model) string {
 	if !m.collectionChoices.collectionsLoaded {
 		title = "Select a source and then a target collection"
 		spinner := fmt.Sprintf("\n %s%s\n\n", m.spinner.View(), " Fetching Collections...")
-		view = lipgloss.PlaceHorizontal(80, lipgloss.Center, spinner)
+		view = lipgloss.PlaceHorizontal(60, lipgloss.Center, spinner)
 		tpl += m.collectionChoicesHelp()
 	} else {
 		var tables []string
@@ -727,12 +731,13 @@ func collectionChoiceTableView(m model) string {
 				tpl += m.collectionChoicesCopyHelp()
 			}
 
-			title = "Remove choices or start coping data"
+			title = "Remove choices or press enter to start coping data"
 			tables = []string{
 				lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.collectionChoices.copyTaskTable.View())),
 			}
 		} else {
-			title = "Select one or more pairs of source and target collections"
+			m.buildCollectionMapRows()
+			title = "Select the source collection and then the target collection"
 			tables = []string{
 				lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.collectionChoices.sourceTable.View())),
 				lipgloss.JoinVertical(lipgloss.Center, pad.Render(m.collectionChoices.targetTable.View())),
@@ -842,7 +847,7 @@ func (m *model) buildCollectionMapRows() {
 		if !m.collectionChoices.CopyStarted {
 			status = "Not Started"
 		} else {
-			status = fmt.Sprintf("%s %s", "Copying", m.spinner.View())
+			status = fmt.Sprintf("%s %s", "Copying", m.collectionChoices.copyTasks[i].spinner.View())
 		}
 
 		if m.collectionChoices.copyTasks[i].complete {

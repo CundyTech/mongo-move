@@ -36,20 +36,20 @@ func main() {
 	cctvm.pageSize = 5
 	cctvm.currentTableIndex = 0
 	cctvm.sourceTable = buildTable([]table.Column{
-		table.NewColumn(sourceCollectionsColumnName, sourceCollectionsColumnName, 25),
+		table.NewColumn(sourceCollectionsColumnName, sourceCollectionsColumnName, 25).WithFiltered(true),
 		table.NewColumn(recordsCountColumnName, recordsCountColumnName, 10),
 	}).
 		WithPageSize(cctvm.pageSize).
 		Focused(true)
 	cctvm.targetTable = buildTable([]table.Column{
-		table.NewColumn(targetCollectionsColumnName, targetCollectionsColumnName, 25),
+		table.NewColumn(targetCollectionsColumnName, targetCollectionsColumnName, 25).WithFiltered(true),
 		table.NewColumn(recordsCountColumnName, recordsCountColumnName, 10),
 	}).
 		WithPageSize(cctvm.pageSize).
 		Focused(false)
 	cctvm.copyTaskTable = buildTable([]table.Column{
-		table.NewColumn(targetCollectionsColumnName, targetCollectionsColumnName, 25),
-		table.NewColumn(targetCollectionsColumnName, targetCollectionsColumnName, 25),
+		table.NewColumn(sourceCollectionsColumnName, sourceCollectionsColumnName, 25).WithFiltered(true),
+		table.NewColumn(targetCollectionsColumnName, targetCollectionsColumnName, 25).WithFiltered(true),
 		table.NewColumn(CopyStatusColumnName, CopyStatusColumnName, 15),
 	}).
 		WithPageSize(cctvm.pageSize).

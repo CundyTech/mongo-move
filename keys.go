@@ -18,8 +18,6 @@ type keyMap struct {
 	Select           key.Binding
 	IncreasePageSize key.Binding
 	DecreasePageSize key.Binding
-	IncreaseRows     key.Binding
-	DecreaseRows     key.Binding
 	ToggleAltView    key.Binding
 	StartCopy        key.Binding
 	EditCopyTasks    key.Binding
@@ -74,14 +72,6 @@ var keys = keyMap{
 		key.WithKeys("u"),
 		key.WithHelp("u", "page size (-1)"),
 	),
-	IncreaseRows: key.NewBinding(
-		key.WithKeys("y"),
-		key.WithHelp("y", "rows (+10)"),
-	),
-	DecreaseRows: key.NewBinding(
-		key.WithKeys("z"),
-		key.WithHelp("z", "row (-10)"),
-	),
 	StartCopy: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "start Copy"),
@@ -106,12 +96,10 @@ func (m model) databaseChoicesHelp() string {
 
 	table := subtleStyle.Render(m.keyBindings.keys.IncreasePageSize.Help().Key+seperator+m.keyBindings.keys.IncreasePageSize.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.DecreasePageSize.Help().Key+seperator+m.keyBindings.keys.DecreasePageSize.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.IncreaseRows.Help().Key+seperator+m.keyBindings.keys.IncreaseRows.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.DecreaseRows.Help().Key+seperator+m.keyBindings.keys.DecreaseRows.Help().Desc) + "\n"
+		subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
+		subtleStyle.Render(m.keyBindings.keys.QuitFilter.Help().Key+seperator+m.keyBindings.keys.QuitFilter.Help().Desc) + "\n"
 
-	other := subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.QuitFilter.Help().Key+seperator+m.keyBindings.keys.QuitFilter.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
+	other := subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
 
 	help := []string{
@@ -133,20 +121,17 @@ func (m model) collectionChoicesHelp() string {
 
 	table := subtleStyle.Render(m.keyBindings.keys.IncreasePageSize.Help().Key+seperator+m.keyBindings.keys.IncreasePageSize.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.DecreasePageSize.Help().Key+seperator+m.keyBindings.keys.DecreasePageSize.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.IncreaseRows.Help().Key+seperator+m.keyBindings.keys.IncreaseRows.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.DecreaseRows.Help().Key+seperator+m.keyBindings.keys.DecreaseRows.Help().Desc) + "\n"
-
-	other := subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
+		subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.QuitFilter.Help().Key+seperator+m.keyBindings.keys.QuitFilter.Help().Desc) + "\n"
 
-	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+m.keyBindings.keys.ToggleAltView.Help().Desc) + "\n" +
+	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+"view selections") + "\n" +
+		"\n" +
 		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
 
 	help := []string{
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(navigation)),
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(table)),
-		lipgloss.JoinVertical(lipgloss.Center, pad.Render(other)),
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(copy)),
 	}
 
@@ -163,13 +148,10 @@ func (m model) collectionChoicesCopyHelp() string {
 
 	table := subtleStyle.Render(m.keyBindings.keys.IncreasePageSize.Help().Key+seperator+m.keyBindings.keys.IncreasePageSize.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.DecreasePageSize.Help().Key+seperator+m.keyBindings.keys.DecreasePageSize.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.IncreaseRows.Help().Key+seperator+m.keyBindings.keys.IncreaseRows.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.DecreaseRows.Help().Key+seperator+m.keyBindings.keys.DecreaseRows.Help().Desc) + "\n"
-
-	other := subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
+		subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.QuitFilter.Help().Key+seperator+m.keyBindings.keys.QuitFilter.Help().Desc) + "\n"
 
-	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+m.keyBindings.keys.ToggleAltView.Help().Desc) + "\n" +
+	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+"view collections") + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.StartCopy.Help().Key+seperator+m.keyBindings.keys.StartCopy.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+"remove") + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
@@ -177,7 +159,6 @@ func (m model) collectionChoicesCopyHelp() string {
 	help := []string{
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(navigation)),
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(table)),
-		lipgloss.JoinVertical(lipgloss.Center, pad.Render(other)),
 		lipgloss.JoinVertical(lipgloss.Center, pad.Render(copy)),
 	}
 
