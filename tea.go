@@ -334,13 +334,13 @@ func updateDatabaseChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, m.keyBindings.keys.QuitFilter):
+		case key.Matches(msg, m.keyBindings.keys.FilterQuit):
 			if m.databaseChoices.sourceTable.GetFocused() {
 				m.databaseChoices.sourceTableFiltered = false
 			} else if m.databaseChoices.targetTable.GetFocused() {
 				m.databaseChoices.targetTableFiltered = false
 			}
-		case key.Matches(msg, m.keyBindings.keys.Filter):
+		case key.Matches(msg, m.keyBindings.keys.FilterStart):
 			// Set as as filtered so we can update the UI to give a clue before user input
 			if m.databaseChoices.sourceTable.GetFocused() {
 				m.databaseChoices.sourceTableFiltered = true
@@ -420,19 +420,11 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "a":
-			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(true)
-			m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
-			m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(false)
-
-		case "b":
-			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(false)
-			m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(true)
-			m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(false)
-
-		case "enter":
-			if len(m.collectionChoices.copyTasks) != 0 {
+		switch {
+		case key.Matches(msg, m.keyBindings.keys.Enter):
+			if len(m.collectionChoices.copyTasks) != 0 &&
+				m.collectionChoices.altscreen &&
+				!m.collectionChoices.collectionsCopied {
 				m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(false)
 				m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
 				m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(true)
@@ -454,9 +446,9 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 				return m, tea.Batch(cmds...)
 			}
-		case "tab":
+		case key.Matches(msg, m.keyBindings.keys.Tab):
 			var cmd tea.Cmd
-			if m.collectionChoices.altscreen {
+			if m.collectionChoices.altscreen && !m.collectionChoices.collectionsCopied {
 				m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(true)
 				m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
 				m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(false)
@@ -476,26 +468,15 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				}
 				return m, cmd
 			}
-		case "u":
+		case key.Matches(msg, m.keyBindings.keys.DecreasePageSize):
 			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithPageSize(m.collectionChoices.sourceTable.PageSize() - 1)
 			m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithPageSize(m.collectionChoices.targetTable.PageSize() - 1)
 
-		case "i":
+		case key.Matches(msg, m.keyBindings.keys.IncreasePageSize):
 			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithPageSize(m.collectionChoices.sourceTable.PageSize() + 1)
 			m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithPageSize(m.collectionChoices.targetTable.PageSize() + 1)
 
-		case "z":
-			if m.collectionChoices.rowCount < 10 {
-				break
-			}
-
-			m.collectionChoices.rowCount -= 10
-			m.buildCollectionTableRows()
-
-		case "x":
-			m.collectionChoices.rowCount += 10
-			m.buildCollectionTableRows()
-		case " ":
+		case key.Matches(msg, m.keyBindings.keys.Select):
 			if m.collectionChoices.sourceTable.GetFocused() {
 				if m.collectionChoices.sourceTable.TotalRows() > 0 {
 
@@ -515,6 +496,9 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				}
 				m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(false)
 				m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(true)
+
+				// Refresh screen after table size change
+				return m, tea.ClearScreen
 
 			} else if m.collectionChoices.targetTable.GetFocused() {
 				if m.collectionChoices.targetTable.TotalRows() > 0 {
@@ -551,43 +535,47 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 						m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(true)
 						m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
 					}
+
+					// Refresh screen after table size change
+					return m, tea.ClearScreen
 				}
 			} else if m.collectionChoices.copyTaskTable.GetFocused() {
-				if m.collectionChoices.copyTaskTable.TotalRows() > 0 {
-					// Delete selected copy task
-					row := m.collectionChoices.copyTaskTable.HighlightedRow()
-					var i = m.collectionChoices.copyTaskTable.GetHighlightedRowIndex()
-					var target = row.Data[targetCollectionsColumnName].(collection)
-					var source = row.Data[sourceCollectionsColumnName].(collection)
+				if !m.collectionChoices.collectionsCopied {
+					if m.collectionChoices.copyTaskTable.TotalRows() > 0 {
+						// Delete selected copy task
+						row := m.collectionChoices.copyTaskTable.HighlightedRow()
+						var i = m.collectionChoices.copyTaskTable.GetHighlightedRowIndex()
+						var target = row.Data[targetCollectionsColumnName].(collection)
+						var source = row.Data[sourceCollectionsColumnName].(collection)
 
-					m.databaseChoices.targetCollections = append(m.databaseChoices.targetCollections, target)
-					m.databaseChoices.sourceCollections = append(m.databaseChoices.sourceCollections, source)
-					m.collectionChoices.copyTasks = removeItem(m.collectionChoices.copyTasks, i)
+						m.databaseChoices.targetCollections = append(m.databaseChoices.targetCollections, target)
+						m.databaseChoices.sourceCollections = append(m.databaseChoices.sourceCollections, source)
+						m.collectionChoices.copyTasks = removeItem(m.collectionChoices.copyTasks, i)
 
-					m.buildCollectionTableRows()
-					m.buildCollectionMapRows()
-				} else {
-					// Switch back to source table
-					m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(true)
-					m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
-					m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(false)
+						m.buildCollectionTableRows()
+						m.buildCollectionMapRows()
+					} else {
+						// Switch back to source table
+						m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(true)
+						m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
+						m.collectionChoices.copyTaskTable = m.collectionChoices.copyTaskTable.Focused(false)
 
-					m.collectionChoices.altscreen = !m.collectionChoices.altscreen
-					return m, tea.EnterAltScreen
+						m.collectionChoices.altscreen = !m.collectionChoices.altscreen
+						return m, tea.EnterAltScreen
+					}
+					// Refresh screen after table size change
+					return m, tea.ClearScreen
 				}
-
-				// Refresh screen after table size change
-				return m, tea.ClearScreen
 			}
 
-		case "/":
+		case key.Matches(msg, m.keyBindings.keys.FilterStart):
 			// Set as as filtered so we can update the UI to give a clue before user input
 			if m.collectionChoices.sourceTable.GetFocused() {
 				m.collectionChoices.sourceTableFiltered = true
 			} else if m.collectionChoices.targetTable.GetFocused() {
 				m.collectionChoices.targetTableFiltered = true
 			}
-		case "esc":
+		case key.Matches(msg, m.keyBindings.keys.FilterQuit):
 			if m.collectionChoices.sourceTable.GetFocused() {
 				m.collectionChoices.sourceTableFiltered = false
 			} else if m.collectionChoices.targetTable.GetFocused() {

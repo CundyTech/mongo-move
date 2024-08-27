@@ -6,6 +6,7 @@ import (
 )
 
 type keyMap struct {
+	Tab              key.Binding
 	Up               key.Binding
 	Down             key.Binding
 	Left             key.Binding
@@ -13,8 +14,8 @@ type keyMap struct {
 	Enter            key.Binding
 	Help             key.Binding
 	Quit             key.Binding
-	Filter           key.Binding
-	QuitFilter       key.Binding
+	FilterStart      key.Binding
+	FilterQuit       key.Binding
 	Select           key.Binding
 	IncreasePageSize key.Binding
 	DecreasePageSize key.Binding
@@ -32,6 +33,12 @@ type keyModel struct {
 
 // add key bindings
 var keys = keyMap{
+	Enter: key.NewBinding(
+		key.WithKeys("enter"),
+	),
+	Tab: key.NewBinding(
+		key.WithKeys("tab"),
+	),
 	Up: key.NewBinding(
 		key.WithKeys("up"),
 		key.WithHelp("↑", "move up"),
@@ -48,11 +55,11 @@ var keys = keyMap{
 		key.WithKeys("right"),
 		key.WithHelp("→", "page right"),
 	),
-	Filter: key.NewBinding(
+	FilterStart: key.NewBinding(
 		key.WithKeys("/"),
 		key.WithHelp("/  ", "filter (start)"),
 	),
-	QuitFilter: key.NewBinding(
+	FilterQuit: key.NewBinding(
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "filter (exit)"),
 	),
@@ -96,8 +103,8 @@ func (m model) databaseChoicesHelp() string {
 
 	table := subtleStyle.Render(m.keyBindings.keys.IncreasePageSize.Help().Key+seperator+m.keyBindings.keys.IncreasePageSize.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.DecreasePageSize.Help().Key+seperator+m.keyBindings.keys.DecreasePageSize.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.QuitFilter.Help().Key+seperator+m.keyBindings.keys.QuitFilter.Help().Desc) + "\n"
+		subtleStyle.Render(m.keyBindings.keys.FilterStart.Help().Key+seperator+m.keyBindings.keys.FilterStart.Help().Desc) + "\n" +
+		subtleStyle.Render(m.keyBindings.keys.FilterQuit.Help().Key+seperator+m.keyBindings.keys.FilterQuit.Help().Desc) + "\n"
 
 	other := subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
@@ -121,8 +128,8 @@ func (m model) collectionChoicesHelp() string {
 
 	table := subtleStyle.Render(m.keyBindings.keys.IncreasePageSize.Help().Key+seperator+m.keyBindings.keys.IncreasePageSize.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.DecreasePageSize.Help().Key+seperator+m.keyBindings.keys.DecreasePageSize.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.QuitFilter.Help().Key+seperator+m.keyBindings.keys.QuitFilter.Help().Desc) + "\n"
+		subtleStyle.Render(m.keyBindings.keys.FilterStart.Help().Key+seperator+m.keyBindings.keys.FilterStart.Help().Desc) + "\n" +
+		subtleStyle.Render(m.keyBindings.keys.FilterQuit.Help().Key+seperator+m.keyBindings.keys.FilterQuit.Help().Desc) + "\n"
 
 	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+"view selections") + "\n" +
 		"\n" +
@@ -148,8 +155,8 @@ func (m model) collectionChoicesCopyHelp() string {
 
 	table := subtleStyle.Render(m.keyBindings.keys.IncreasePageSize.Help().Key+seperator+m.keyBindings.keys.IncreasePageSize.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.DecreasePageSize.Help().Key+seperator+m.keyBindings.keys.DecreasePageSize.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Filter.Help().Key+seperator+m.keyBindings.keys.Filter.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.QuitFilter.Help().Key+seperator+m.keyBindings.keys.QuitFilter.Help().Desc) + "\n"
+		subtleStyle.Render(m.keyBindings.keys.FilterStart.Help().Key+seperator+m.keyBindings.keys.FilterStart.Help().Desc) + "\n" +
+		subtleStyle.Render(m.keyBindings.keys.FilterQuit.Help().Key+seperator+m.keyBindings.keys.FilterQuit.Help().Desc) + "\n"
 
 	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+"view collections") + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.StartCopy.Help().Key+seperator+m.keyBindings.keys.StartCopy.Help().Desc) + "\n" +
