@@ -469,9 +469,10 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		case key.Matches(msg, m.keyBindings.keys.DecreasePageSize):
-			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithPageSize(m.collectionChoices.sourceTable.PageSize() - 1)
-			m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithPageSize(m.collectionChoices.targetTable.PageSize() - 1)
-
+			if m.collectionChoices.sourceTable.PageSize() > 1 {
+				m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithPageSize(m.collectionChoices.sourceTable.PageSize() - 1)
+				m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithPageSize(m.collectionChoices.targetTable.PageSize() - 1)
+			}
 		case key.Matches(msg, m.keyBindings.keys.IncreasePageSize):
 			m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.WithPageSize(m.collectionChoices.sourceTable.PageSize() + 1)
 			m.collectionChoices.targetTable = m.collectionChoices.targetTable.WithPageSize(m.collectionChoices.targetTable.PageSize() + 1)
@@ -492,13 +493,9 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 					var i = m.collectionChoices.sourceTable.GetHighlightedRowIndex()
 					m.databaseChoices.sourceCollections = removeItem(m.databaseChoices.sourceCollections, i)
 					m.buildCollectionTableRows()
-
 				}
 				m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(false)
 				m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(true)
-
-				// Refresh screen after table size change
-				return m, tea.ClearScreen
 
 			} else if m.collectionChoices.targetTable.GetFocused() {
 				if m.collectionChoices.targetTable.TotalRows() > 0 {
@@ -535,9 +532,6 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 						m.collectionChoices.sourceTable = m.collectionChoices.sourceTable.Focused(true)
 						m.collectionChoices.targetTable = m.collectionChoices.targetTable.Focused(false)
 					}
-
-					// Refresh screen after table size change
-					return m, tea.ClearScreen
 				}
 			} else if m.collectionChoices.copyTaskTable.GetFocused() {
 				if !m.collectionChoices.collectionsCopied {
@@ -563,9 +557,9 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 						m.collectionChoices.altscreen = !m.collectionChoices.altscreen
 						return m, tea.EnterAltScreen
 					}
-					// Refresh screen after table size change
-					return m, tea.ClearScreen
 				}
+
+				return m, tea.ClearScreen
 			}
 
 		case key.Matches(msg, m.keyBindings.keys.FilterStart):
