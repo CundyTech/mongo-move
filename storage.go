@@ -101,7 +101,7 @@ func (s storage) getRecordCount(client *mongo.Client, databaseName string, colle
 
 // Get collections from target database.
 func (s storage) getTargetCollections(databaseName string) ([]collection, error) {
-	options := options.Client().ApplyURI(s.sourceURI)
+	options := options.Client().ApplyURI(s.targetURI)
 	client, err := mongo.Connect(context.Background(), options)
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (s storage) getTargetCollections(databaseName string) ([]collection, error)
 	db := client.Database(databaseName)
 
 	// Retrieve collection names
-	c, err := db.ListCollectionNames(context.TODO(), bson.D{})
+	c, err := db.ListCollectionNames(context.Background(), bson.D{})
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (s storage) getSourceCollections(databaseName string) ([]collection, error)
 	db := client.Database(databaseName)
 
 	// Retrieve collection names
-	c, err := db.ListCollectionNames(context.TODO(), bson.D{})
+	c, err := db.ListCollectionNames(context.Background(), bson.D{})
 	if err != nil {
 		return nil, err
 	}
