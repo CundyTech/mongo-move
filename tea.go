@@ -643,9 +643,13 @@ func updateCollectionChoiceTable(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 func errorView(m model) string {
 	tpl := "\nA fatal error occured while %s\n"
 	tpl += "%s\n%s\n\n"
-	tpl += subtleStyle.Render("q: quit")
+	tpl += subtleStyle.Render("ctrl-c: quit")
 
-	return fmt.Sprintf(tpl, m.fatalError.context, errorImage, "Error Message: "+keywordStyle.Render(m.fatalError.text))
+	var style = lipgloss.NewStyle().
+		Width(50)
+	var errorMsg = style.Render("Error Message: " + keywordStyle.Render(m.fatalError.text))
+
+	return fmt.Sprintf(tpl, m.fatalError.context, errorImage, errorMsg)
 }
 
 // The orchestrator view, which just calls the appropriate sub-view
