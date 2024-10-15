@@ -3,10 +3,15 @@
 
 A CLI tool built in GO that quickly moves records from a MongoDB source database to a target over two different servers
 
-
-
-
 ## Features
+
+- Add source and target databases using config file
+- Select source and target database
+- Select one or more source and target collections
+- Manage choices before starting copy
+- Filter and pagination options on each table to aid selection
+
+## Demo
 
 - Select source and target database
 
