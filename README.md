@@ -1,7 +1,7 @@
 
 # MongoMove
 
-A CLI tool built in GO that quickly moves records from a MongoDB source database to a target over two different servers
+A CLI tool built in GO that quickly _(compared to doing it manually via Compass export collection feature)_ moves records from a MongoDB source database to a target over two different servers
 
 ## Features
 
