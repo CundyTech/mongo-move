@@ -299,13 +299,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		} else if m.collectionChoices.CopyStarted {
 			// copy started spinners
-			for _, v := range m.collectionChoices.copyTasks {
-				if v.id == msg.ID {
-					m.spinner, cmd = v.spinner.Update(msg)
+			for i := range m.collectionChoices.copyTasks {
+				if m.collectionChoices.copyTasks[i].id == msg.ID {
+					m.collectionChoices.copyTasks[i].spinner, cmd = m.collectionChoices.copyTasks[i].spinner.Update(msg)
 					cmds = append(cmds, cmd)
 				}
 			}
-
 			m.buildCollectionMapRows()
 		}
 		return m, tea.Batch(cmds...)
