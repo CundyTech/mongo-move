@@ -95,6 +95,7 @@ var keys = keyMap{
 
 func (m model) databaseChoicesHelp() string {
 	pad := lipgloss.NewStyle().Padding(2, 2)
+	highlight := lipgloss.NewStyle().Foreground(lipgloss.Color("#54ad48"))
 	seperator := ": "
 	navigation := subtleStyle.Render(m.keyBindings.keys.Up.Help().Key+seperator+m.keyBindings.keys.Up.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Down.Help().Key+seperator+m.keyBindings.keys.Down.Help().Desc) + "\n" +
@@ -106,7 +107,7 @@ func (m model) databaseChoicesHelp() string {
 		subtleStyle.Render(m.keyBindings.keys.FilterStart.Help().Key+seperator+m.keyBindings.keys.FilterStart.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.FilterQuit.Help().Key+seperator+m.keyBindings.keys.FilterQuit.Help().Desc) + "\n"
 
-	other := subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
+	other := highlight.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
 
 	help := []string{
@@ -120,6 +121,7 @@ func (m model) databaseChoicesHelp() string {
 
 func (m model) collectionChoicesHelp() string {
 	pad := lipgloss.NewStyle().Padding(2, 2)
+	highlight := lipgloss.NewStyle().Foreground(lipgloss.Color("#54ad48"))
 	seperator := ": "
 	navigation := subtleStyle.Render(m.keyBindings.keys.Up.Help().Key+seperator+m.keyBindings.keys.Up.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Down.Help().Key+seperator+m.keyBindings.keys.Down.Help().Desc) + "\n" +
@@ -131,9 +133,9 @@ func (m model) collectionChoicesHelp() string {
 		subtleStyle.Render(m.keyBindings.keys.FilterStart.Help().Key+seperator+m.keyBindings.keys.FilterStart.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.FilterQuit.Help().Key+seperator+m.keyBindings.keys.FilterQuit.Help().Desc) + "\n"
 
-	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+"view selections") + "\n" +
+	copy := highlight.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+"view selections") + "\n" +
+		highlight.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
 		"\n" +
-		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+m.keyBindings.keys.Select.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
 
 	help := []string{
@@ -147,6 +149,7 @@ func (m model) collectionChoicesHelp() string {
 
 func (m model) collectionChoicesCopyHelp() string {
 	pad := lipgloss.NewStyle().Padding(2, 2)
+	highlight := lipgloss.NewStyle().Foreground(lipgloss.Color("#54ad48"))
 	seperator := ": "
 	navigation := subtleStyle.Render(m.keyBindings.keys.Up.Help().Key+seperator+m.keyBindings.keys.Up.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Down.Help().Key+seperator+m.keyBindings.keys.Down.Help().Desc) + "\n" +
@@ -158,9 +161,9 @@ func (m model) collectionChoicesCopyHelp() string {
 		subtleStyle.Render(m.keyBindings.keys.FilterStart.Help().Key+seperator+m.keyBindings.keys.FilterStart.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.FilterQuit.Help().Key+seperator+m.keyBindings.keys.FilterQuit.Help().Desc) + "\n"
 
-	copy := subtleStyle.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+"view collections") + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.StartCopy.Help().Key+seperator+m.keyBindings.keys.StartCopy.Help().Desc) + "\n" +
-		subtleStyle.Render(m.keyBindings.keys.Select.Help().Key+seperator+"remove") + "\n" +
+	copy := highlight.Render(m.keyBindings.keys.ToggleAltView.Help().Key+seperator+"view collections") + "\n" +
+		highlight.Render(m.keyBindings.keys.Select.Help().Key+seperator+"remove") + "\n" +
+		highlight.Render(m.keyBindings.keys.StartCopy.Help().Key+seperator+m.keyBindings.keys.StartCopy.Help().Desc) + "\n" +
 		subtleStyle.Render(m.keyBindings.keys.Quit.Help().Key+seperator+m.keyBindings.keys.Quit.Help().Desc) + "\n"
 
 	help := []string{
